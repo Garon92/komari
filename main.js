@@ -224,7 +224,7 @@
       const x = this.positionX;
       const y = this.positionY;
       const r = this.radiusPixels;
-      const isLow = state.perf && state.perf.mode === "low";
+      const isLow = false;
       // Animation helpers
       const flapT = (Math.sin(this.wingAngleRadians) + 1) * 0.5; // 0..1
       const wingOpen = 0.45 + 0.55 * flapT;
@@ -594,7 +594,7 @@
       const baseAlpha = 0.45 - 0.28 * lifeT;
       const darkAlpha = 0.6 - 0.4 * lifeT;
       const glossAlpha = 0.12 * wet;
-      const isLow = state.perf && state.perf.mode === "low";
+      const isLow = false;
 
       // base blot and streaks
       context.save();
@@ -904,15 +904,11 @@
       update(deltaSeconds);
     }
     render();
-    // perf fps estimate and mode switcher
+    // perf fps estimate (no mode switching; always high quality)
     const instFps = 1 / Math.max(rawDeltaSeconds, 0.001);
     state.perf.fps = state.perf.fps * 0.9 + instFps * 0.1;
+    state.perf.mode = "high";
     if (now - state.perf.lastCheckMs >= 600) {
-      const aliveNow = state.mosquitos.filter(m => m.alive).length;
-      const shouldLow = state.perf.fps < 48 || aliveNow > 180;
-      const shouldHigh = state.perf.fps > 55 && aliveNow < 140;
-      if (shouldLow) state.perf.mode = "low";
-      else if (shouldHigh) state.perf.mode = "high";
       state.perf.lastCheckMs = now;
     }
     requestAnimationFrame(tick);
@@ -936,14 +932,14 @@
     for (const m of state.mosquitos) {
       m.update(deltaSeconds, cssWidth, cssHeight);
     }
-    // update splats (throttle in low perf)
-    const updateEvery = (state.perf.mode === "low") ? 2 : 1;
+    // update splats (no low-perf throttling)
+    const updateEvery = 1;
     for (let i = 0; i < state.splats.length; i++) {
       if (i % updateEvery === 0) state.splats[i].update(deltaSeconds);
     }
     // cleanup with cap in low perf
     state.mosquitos = state.mosquitos.filter(m => m.alive);
-    const maxSplats = (state.perf.mode === "low") ? 80 : 200;
+    const maxSplats = 200;
     state.splats = state.splats.filter(s => !s.isExpired());
     if (state.splats.length > maxSplats) state.splats.splice(0, state.splats.length - maxSplats);
     // keep alive counts in hud
