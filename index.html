@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Komari - Plácačka</title>
+  <link rel="stylesheet" href="./style.css">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0f172a">
+</head>
+<body>
+  <canvas id="game" aria-label="Hrací plocha" role="img"></canvas>
+
+  <div class="hud" role="toolbar" aria-label="Ovládání hry">
+    <div class="stats">
+      <span>Skóre: <strong id="score">0</strong></span>
+    </div>
+    <div class="controls">
+      <button id="btnStart" type="button" title="Start/Pokračovat">
+        <span class="icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8 5v14l11-7-11-7Z"/></svg>
+        </span>
+        <span class="label">Start</span>
+      </button>
+      <button id="btnPause" type="button" title="Pauza">
+        <span class="icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+        </span>
+        <span class="label">Pauza</span>
+      </button>
+      <button id="btnRestart" type="button" title="Restart">
+        <span class="icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 5V2l-4 4 4 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7Z"/></svg>
+        </span>
+        <span class="label">Restart</span>
+      </button>
+      <button id="btnSound" type="button" title="Zvuk">
+        <span class="icon" aria-hidden="true" id="soundIcon"></span>
+        <span class="label">Zvuk</span>
+      </button>
+      <select id="swatterType" title="Typ plácačky">
+        <option value="round" selected>Kulatá</option>
+        <option value="square">Klasická</option>
+      </select>
+      <input id="swatterColor" type="color" title="Barva plácačky" value="#60a5fa" />
+    </div>
+  </div>
+
+  <div id="help">
+    Klikni/tapni kam chceš plácnout. Space = pauza/pokračovat, R = restart.
+  </div>
+
+  <script src="./main.js"></script>
+</body>
+</html>
+
+
