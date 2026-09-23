@@ -51,7 +51,7 @@ export class Audio {
       if (!AC) return null;
       const ctx = new AC();
       const master = ctx.createGain();
-      master.gain.value = 0.9;
+      master.gain.value = this.enabled ? this.masterGain() : 0;
       const comp = ctx.createDynamicsCompressor();
       comp.threshold.value = -14;
       comp.ratio.value = 4;
@@ -77,10 +77,22 @@ export class Audio {
     }
   }
 
+  private volume = 0.7;
+
+  /** Global volume 0..1 (kit settings). */
+  setVolume(v: number): void {
+    this.volume = Math.max(0, Math.min(1, v));
+    if (this.master && this.ctx) this.master.gain.setTargetAtTime(this.enabled ? this.masterGain() : 0, this.ctx.currentTime, 0.02);
+  }
+
+  private masterGain(): number {
+    return 1.25 * this.volume;
+  }
+
   setEnabled(on: boolean): void {
     this.enabled = on;
     if (!on) this.setBuzzActive(false);
-    if (this.master && this.ctx) this.master.gain.setTargetAtTime(on ? 0.9 : 0, this.ctx.currentTime, 0.02);
+    if (this.master && this.ctx) this.master.gain.setTargetAtTime(on ? this.masterGain() : 0, this.ctx.currentTime, 0.02);
     if (on && this.ctx) this.unlock();
   }
 

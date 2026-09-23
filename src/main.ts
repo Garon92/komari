@@ -1,11 +1,14 @@
+import './kit/kit.css';
 import './style.css';
 import { checkLifetime, checkLive, unlock } from './achievements';
 import { Audio } from './audio/audio';
-import type { Difficulty, Mode, SceneId } from './game/config';
+import { DIFFICULTIES, MODES, type Difficulty, type Mode, type SceneId } from './game/config';
 import { Game, type GameEvent, type Summary } from './game/game';
-import { iconSvg } from './render/icons';
+import {
+  autoPause, countdown, haptic, openSettingsDialog, prefersReducedMotion, recordActivity, resolvedTheme, settings,
+} from './kit';
 import { Renderer, type PointerState } from './render/renderer';
-import { bestKey, loadSave, writeSave, type SaveData } from './storage';
+import { bestKey, loadSave, writeSave, type Prefs, type SaveData } from './storage';
 import { Hud } from './ui/hud';
 import { Screens } from './ui/screens';
 
@@ -14,77 +17,73 @@ import { Screens } from './ui/screens';
 const $ = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T;
 const stage = $<HTMLElement>('stage');
 const canvas = $<HTMLCanvasElement>('game');
-const screenEl = $<HTMLElement>('screen');
+const appbar = document.querySelector('g92-appbar');
 
 const save: SaveData = loadSave();
 const game = new Game();
 const renderer = new Renderer(canvas);
 const audio = new Audio();
-const screens = new Screens(screenEl, $('banner'), $('toasts'));
+const screens = new Screens($('banner'));
 const hud = new Hud($('hud'), () => pause());
-
-const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-const darkScheme = window.matchMedia('(prefers-color-scheme: dark)');
 
 const pointer: PointerState = { x: -100, y: -100, visible: false, touch: false };
 const keysHeld = new Set<string>();
 let paused = false;
 let gameAchievements: string[] = [];
 let resultsTimer = 0;
+let lastSummary: { s: Summary; info: { best: number; isRecord: boolean; newAchievements: string[] } } | null = null;
 
 function applyPrefs(): void {
   renderer.prefs = {
     shape: save.prefs.shape,
     color: save.prefs.color,
     blood: save.prefs.blood,
-    reducedMotion: reducedMotion.matches,
+    reducedMotion: prefersReducedMotion(),
   };
   audio.setBuzzEnabled(save.prefs.buzz);
 }
+
+function applySound(): void {
+  const s = settings.get();
+  audio.setVolume(s.volume);
+  audio.setEnabled(s.sound);
+}
+
 applyPrefs();
+applySound();
+settings.subscribe(() => {
+  applySound();
+  applyPrefs();
+});
 
-// Sound on/off is shared across g92 apps (kit settings); fall back to our own flag.
-const SOUND_KEY = 'g92:settings';
-function readSound(): boolean {
-  try {
-    const s = JSON.parse(localStorage.getItem(SOUND_KEY) ?? '{}') as { sound?: boolean };
-    return s.sound !== false;
-  } catch {
-    return true;
-  }
+function changePrefs(p: Partial<Prefs>): void {
+  Object.assign(save.prefs, p);
+  writeSave(save);
+  applyPrefs();
 }
-function writeSound(on: boolean): void {
-  try {
-    const s = JSON.parse(localStorage.getItem(SOUND_KEY) ?? '{}') as Record<string, unknown>;
-    s.sound = on;
-    localStorage.setItem(SOUND_KEY, JSON.stringify(s));
-  } catch {
-    /* ignore */
-  }
-}
-audio.setEnabled(readSound());
 
-// ------------------------------------------------------------------ appbar actions (local fallback)
+// ------------------------------------------------------------------ appbar
 
-const actions = $('appbar-actions');
-actions.innerHTML = `
-  <button class="icon-btn" type="button" data-act="sound" aria-label="Zvuk">${iconSvg('sound')}</button>
-  <button class="icon-btn" type="button" data-act="fullscreen" aria-label="Celá obrazovka">${iconSvg('fullscreen')}</button>
-  <button class="icon-btn" type="button" data-act="help" aria-label="Jak hrát">${iconSvg('help')}</button>`;
-const soundBtn = actions.querySelector<HTMLButtonElement>('[data-act="sound"]')!;
-function syncSoundBtn(): void {
-  soundBtn.innerHTML = iconSvg(audio.enabled ? 'sound' : 'mute');
-  soundBtn.setAttribute('aria-pressed', String(audio.enabled));
-  soundBtn.title = audio.enabled ? 'Vypnout zvuk (M)' : 'Zapnout zvuk (M)';
+appbar?.addEventListener('g92-help', () => {
+  if (game.isActive && !paused) pause();
+  screens.showHelp();
+});
+appbar?.addEventListener('g92-settings', (e) => {
+  e.preventDefault();
+  if (game.isActive && !paused) pause();
+  openSettingsDialog({ extra: settingsExtra() });
+});
+
+function settingsExtra(): HTMLElement {
+  const wrap = document.createElement('section');
+  wrap.className = 'k-settings-extra';
+  const h = document.createElement('h3');
+  h.className = 'g92-label';
+  h.textContent = 'Komáři';
+  wrap.append(h, screens.swatterPanel(save, changePrefs, true));
+  return wrap;
 }
-syncSoundBtn();
-function toggleSound(): void {
-  audio.setEnabled(!audio.enabled);
-  writeSound(audio.enabled);
-  syncSoundBtn();
-  if (audio.enabled) audio.click();
-}
-soundBtn.addEventListener('click', toggleSound);
+
 function toggleFullscreen(): void {
   const doc = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => void };
   const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
@@ -97,13 +96,10 @@ function toggleFullscreen(): void {
     el.webkitRequestFullscreen?.();
   }
 }
-actions.querySelector('[data-act="fullscreen"]')!.addEventListener('click', toggleFullscreen);
-actions.querySelector('[data-act="help"]')!.addEventListener('click', () => {
-  if (game.isActive && !paused) pause();
-  openHelp();
-});
 
 // ------------------------------------------------------------------ layout
+
+const hudVisible = (): boolean => !$('hud').hidden;
 
 function layout(): void {
   const r = stage.getBoundingClientRect();
@@ -113,19 +109,18 @@ function layout(): void {
   game.setRect({ x: pad, y: top, w: Math.max(100, r.width - pad * 2), h: Math.max(100, r.height - top - pad) });
   if (paused || !rafId) renderer.render(game, pointer, 0);
 }
-const hudVisible = (): boolean => !$('hud').hidden;
 new ResizeObserver(() => layout()).observe(stage);
-window.addEventListener('orientationchange', () => setTimeout(layout, 200));
 
 // ------------------------------------------------------------------ flow
 
 function menuScene(): SceneId {
-  return darkScheme.matches && document.documentElement.dataset.theme !== 'light' ? 'garden' : 'kitchen';
+  return resolvedTheme() === 'dark' ? 'garden' : 'kitchen';
 }
 
 function toStart(): void {
   window.clearTimeout(resultsTimer);
   paused = false;
+  lastSummary = null;
   game.startMenu(menuScene());
   renderer.setScene(game.scene, true);
   hud.show(false);
@@ -140,12 +135,6 @@ function toStart(): void {
 function showStart(): void {
   screens.showStart(save, {
     play: (m, d) => play(m, d),
-    help: () => openHelp(),
-    achievements: () => {
-      audio.click();
-      screens.showAchievements(save, () => showStart());
-    },
-    swatter: () => openSwatter(),
     changed: (m, d) => {
       if (save.prefs.mode !== m || save.prefs.difficulty !== d) {
         save.prefs.mode = m;
@@ -153,41 +142,19 @@ function showStart(): void {
         writeSave(save);
       }
     },
-  });
-}
-
-/** Where to go back from help/settings. */
-function backTarget(): void {
-  if (game.isActive && paused) showPause();
-  else if (game.phase === 'over') showResultsAgain();
-  else showStart();
-}
-
-function openHelp(): void {
-  audio.click();
-  if (!save.prefs.seenHelp) {
-    save.prefs.seenHelp = true;
-    writeSave(save);
-  }
-  screens.showHelp(() => backTarget());
-}
-
-function openSwatter(): void {
-  audio.click();
-  screens.showSwatter(save, {
-    change: (p) => {
-      Object.assign(save.prefs, p);
-      writeSave(save);
-      applyPrefs();
+    help: () => screens.showHelp(),
+    achievements: () => screens.showAchievements(save),
+    swatter: () => screens.showSwatter(save, changePrefs),
+    swatAt: (e) => {
+      const p = localPoint(e);
+      swatAt(p.x, p.y, e.pointerType === 'touch');
     },
-    back: () => backTarget(),
   });
 }
 
 function play(mode: Mode, difficulty: Difficulty): void {
   window.clearTimeout(resultsTimer);
   audio.unlock();
-  audio.click();
   save.prefs.mode = mode;
   save.prefs.difficulty = difficulty;
   writeSave(save);
@@ -203,6 +170,7 @@ function play(mode: Mode, difficulty: Difficulty): void {
   renderer.setScene(game.scene, false);
   layout();
   startLoop();
+  if (mode === 'minute') void countdown({ container: stage });
 }
 
 function pause(): void {
@@ -211,23 +179,18 @@ function pause(): void {
   keysHeld.clear();
   audio.setBuzzActive(false);
   screens.hideBanner();
-  showPause();
-}
-
-function showPause(): void {
   screens.showPause(
-    { mode: game.mode, score: game.score, wave: game.wave, kills: game.kills },
+    { mode: game.mode, score: game.score, wave: game.wave, kills: game.kills, difficulty: game.difficulty },
     {
       resume: () => resume(),
       restart: () => play(game.mode, game.difficulty),
       quit: () => {
         paused = false;
-        screens.hide();
         game.finish();
         startLoop();
       },
-      help: () => openHelp(),
-      swatter: () => openSwatter(),
+      help: () => screens.showHelp(),
+      swatter: () => screens.showSwatter(save, changePrefs),
     },
   );
 }
@@ -239,8 +202,6 @@ function resume(): void {
   audio.unlock();
   startLoop();
 }
-
-let lastSummary: { s: Summary; info: { best: number; isRecord: boolean; newAchievements: string[] } } | null = null;
 
 function onGameOver(s: Summary): void {
   const key = bestKey(s.mode, s.difficulty);
@@ -256,27 +217,27 @@ function onGameOver(s: Summary): void {
   st.games += 1;
   st.bestCombo = Math.max(st.bestCombo, s.bestCombo);
   st.playSeconds += s.duration;
-  for (const [k, v] of Object.entries(s.kindKills)) st.kindKills[k as keyof typeof st.kindKills] = (st.kindKills[k as keyof typeof st.kindKills] ?? 0) + (v ?? 0);
+  for (const [k, v] of Object.entries(s.kindKills)) {
+    const kk = k as keyof typeof st.kindKills;
+    st.kindKills[kk] = (st.kindKills[kk] ?? 0) + (v ?? 0);
+  }
   for (const p of s.powers) if (!st.powers.includes(p)) st.powers.push(p);
   const life = checkLifetime(s, save);
   unlock(save, life);
   gameAchievements.push(...life);
   writeSave(save);
-  recordActivity(s, isRecord);
-  const info = { best: Math.max(prevValue, value), isRecord, newAchievements: [...gameAchievements] };
-  lastSummary = { s, info };
-  if (isRecord && value > 0) audio.fanfare();
-  else audio.gameOver();
+  reportActivity(s);
   for (const id of life) screens.toastAchievement(id);
+  lastSummary = { s, info: { best: Math.max(prevValue, value), isRecord, newAchievements: [...gameAchievements] } };
   resultsTimer = window.setTimeout(() => {
     stage.classList.remove('is-playing');
     hud.show(false);
     screens.hideBanner();
-    showResultsAgain();
+    showResults();
   }, 1100);
 }
 
-function showResultsAgain(): void {
+function showResults(): void {
   if (!lastSummary) {
     showStart();
     return;
@@ -284,24 +245,21 @@ function showResultsAgain(): void {
   const { s, info } = lastSummary;
   screens.showResults(s, info, {
     again: () => play(s.mode, s.difficulty),
-    menu: () => toStart(),
+    start: () => toStart(),
   });
 }
 
-/** Writes "last played" info for the g92 menu (kit activity contract, local fallback). */
-function recordActivity(s: Summary, isRecord: boolean): void {
-  try {
-    const best = save.bests[bestKey(s.mode, s.difficulty)];
-    const entry = {
-      app: 'komari',
-      lastPlayed: new Date().toISOString(),
-      metric: best ? (s.mode === 'zen' ? `${best.kills} komárů` : `rekord ${best.score.toLocaleString('cs-CZ')}`) : '',
-      record: isRecord,
-    };
-    localStorage.setItem('g92:activity:komari', JSON.stringify(entry));
-  } catch {
-    /* ignore */
-  }
+/** "Best score" for the g92 menu card: the best Vlny score (any difficulty), else the mode just played. */
+function reportActivity(s: Summary): void {
+  const waveBests = (['easy', 'normal', 'hard'] as Difficulty[]).map((d) => save.bests[bestKey('waves', d)]?.score ?? 0);
+  const bestWaves = Math.max(...waveBests);
+  const cur = save.bests[bestKey(s.mode, s.difficulty)];
+  const metric = bestWaves > 0
+    ? { label: 'Rekord', value: bestWaves }
+    : cur
+      ? { label: s.mode === 'zen' ? 'Zaplácnuto' : 'Rekord', value: s.mode === 'zen' ? cur.kills : cur.score }
+      : null;
+  recordActivity('komari', { metric, note: `${MODES[s.mode].name} · ${DIFFICULTIES[s.difficulty].name}` });
 }
 
 // ------------------------------------------------------------------ events → sound/ui
@@ -357,13 +315,9 @@ function handle(e: GameEvent): boolean {
       return false;
     case 'bite':
       if (e.blocked) audio.blocked();
-      else audio.bite();
-      if (!e.blocked && navigator.vibrate) {
-        try {
-          navigator.vibrate(120);
-        } catch {
-          /* ignore */
-        }
+      else {
+        audio.bite();
+        haptic('error');
       }
       return false;
     case 'powerDrop':
@@ -387,6 +341,7 @@ function handle(e: GameEvent): boolean {
       return false;
     case 'queenDown':
       audio.queenDown();
+      haptic('success');
       return true;
     case 'waveStart':
       if (game.mode === 'waves' && e.spec) audio.waveStart(e.spec.boss);
@@ -470,7 +425,7 @@ function swatAt(x: number, y: number, touch: boolean): void {
 
 canvas.addEventListener('pointerdown', (e) => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
-  if (paused || screens.current) return;
+  if (paused || screens.current || screens.dialogOpen) return;
   e.preventDefault();
   const p = localPoint(e);
   pointer.x = p.x;
@@ -491,16 +446,7 @@ canvas.addEventListener('pointerleave', (e) => {
   if (e.pointerType !== 'touch') pointer.visible = false;
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-// Swatting through the empty space around the start screen card.
-screenEl.addEventListener('pointerdown', (e) => {
-  if (e.target !== screenEl || screens.current !== 'start') return;
-  const p = localPoint(e);
-  swatAt(p.x, p.y, e.pointerType === 'touch');
-});
-// No pinch-zoom / double-tap zoom on the stage.
-stage.addEventListener('touchmove', (e) => {
-  if (!screens.current) e.preventDefault();
-}, { passive: false });
+stage.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 document.addEventListener('gesturestart', (e) => e.preventDefault());
 
 function moveKeyboardCursor(dt: number): void {
@@ -529,40 +475,32 @@ const DIRS: Record<string, string> = {
 };
 
 window.addEventListener('keydown', (e) => {
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+  if (screens.dialogOpen) return; // kit dialogs handle their own keys
   const target = e.target as HTMLElement | null;
-  const onControl = target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.tagName === 'A' || target.tagName === 'LABEL');
+  const onControl = Boolean(target && /^(BUTTON|INPUT|A|LABEL|SELECT|TEXTAREA)$/.test(target.tagName));
   if (e.code === 'KeyM') {
-    toggleSound();
+    settings.set({ sound: !settings.get().sound });
     return;
   }
   if (e.code === 'KeyF' && !onControl) {
     toggleFullscreen();
     return;
   }
-  // Screens (menus).
-  if (screens.current) {
-    if (e.key === 'Escape') {
+  if (screens.current === 'pause') {
+    if (e.code === 'Space' && !onControl) {
       e.preventDefault();
-      if (screens.current === 'pause') resume();
-      else if (screens.current === 'help' || screens.current === 'achievements' || screens.current === 'swatter') backTarget();
-      return;
-    }
-    if (screens.current === 'pause' && !onControl && (e.code === 'Space' || e.code === 'KeyP')) {
-      e.preventDefault();
-      resume();
-      return;
-    }
-    if (screens.current === 'pause' && e.code === 'KeyR') {
+      screens.resumeFromKey();
+    } else if (e.code === 'KeyR') {
       play(game.mode, game.difficulty);
-      return;
-    }
-    if (screens.current === 'results' && e.code === 'KeyR') {
-      if (lastSummary) play(lastSummary.s.mode, lastSummary.s.difficulty);
-      return;
     }
     return;
   }
+  if (screens.current === 'results') {
+    if (e.code === 'KeyR' && lastSummary) play(lastSummary.s.mode, lastSummary.s.difficulty);
+    return;
+  }
+  if (screens.current) return;
   if (!game.isActive) return;
   if (e.key === 'Escape' || e.code === 'KeyP' || e.code === 'Space') {
     e.preventDefault();
@@ -595,24 +533,23 @@ window.addEventListener('keyup', (e) => {
   if (dir) keysHeld.delete(dir);
 });
 
-// Auto-pause when the tab is hidden or the window loses focus.
+// Auto-pause when the tab is hidden or the window loses focus (kit helper) + silence audio.
+autoPause(() => pause());
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    pause();
-    audio.suspend();
-  } else {
+  if (document.hidden) audio.suspend();
+  else {
     audio.resume();
     if (!paused) startLoop();
   }
 });
-window.addEventListener('blur', () => pause());
-reducedMotion.addEventListener('change', applyPrefs);
-darkScheme.addEventListener('change', () => {
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   if (game.phase === 'menu') {
     game.startMenu(menuScene());
     renderer.setScene(game.scene, true);
   }
 });
+// Unlock our audio on the first gesture anywhere.
+window.addEventListener('pointerdown', () => audio.unlock(), { once: true, capture: true });
 
 // ------------------------------------------------------------------ debug hook (tests / playwright)
 

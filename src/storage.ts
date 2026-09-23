@@ -1,4 +1,5 @@
 import type { Difficulty, Mode, MosquitoKind, PowerKind } from './game/config';
+import { createStore, type Store } from './kit/store';
 import type { SwatterShape } from './render/swatter';
 
 /** Persistent save (versioned, with migration from the original game's keys). */
@@ -37,7 +38,6 @@ export interface SaveData {
   prefs: Prefs;
 }
 
-export const STORAGE_KEY = 'g92:komari:save';
 const LEGACY_BEST = 'komari_bestScore';
 const LEGACY_SWATTER = 'komari_swatter';
 
@@ -49,14 +49,6 @@ export function defaultSave(): SaveData {
     achievements: {},
     prefs: { shape: 'round', color: '#60a5fa', blood: true, buzz: true, mode: 'waves', difficulty: 'normal', seenHelp: false },
   };
-}
-
-function safeGet(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
 }
 
 /** Normalises anything we find in storage into a valid SaveData. */
@@ -97,26 +89,36 @@ export function migrateLegacy(d: SaveData, best: string | null, swatter: string 
   return d;
 }
 
-export function loadSave(): SaveData {
-  const raw = safeGet(STORAGE_KEY);
-  if (raw) {
-    try {
-      return normalize(JSON.parse(raw));
-    } catch {
-      /* fall through */
-    }
+type StoreShape = { save: SaveData };
+
+let store: Store<StoreShape> | null = null;
+
+/** Kit store: `g92:komari:save` (versioned; migrates the original game's keys once). */
+function getStore(): Store<StoreShape> {
+  if (!store) {
+    store = createStore<StoreShape>('komari', {
+      version: 2,
+      defaults: { save: defaultSave() },
+      migrate(from, m) {
+        if (from < 2) {
+          const current = m.legacyJSON<unknown>('g92:komari:save');
+          const base = current ? normalize(current) : defaultSave();
+          m.set('save', migrateLegacy(base, m.legacy(LEGACY_BEST), m.legacy(LEGACY_SWATTER)));
+          m.removeLegacy(LEGACY_BEST);
+          m.removeLegacy(LEGACY_SWATTER);
+        }
+      },
+    });
   }
-  const d = migrateLegacy(defaultSave(), safeGet(LEGACY_BEST), safeGet(LEGACY_SWATTER));
-  writeSave(d);
-  return d;
+  return store;
+}
+
+export function loadSave(): SaveData {
+  return normalize(getStore().get('save'));
 }
 
 export function writeSave(d: SaveData): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(d));
-  } catch {
-    /* storage full / private mode – the game still works */
-  }
+  getStore().set('save', d);
 }
 
 export const bestKey = (m: Mode, d: Difficulty): `${Mode}:${Difficulty}` => `${m}:${d}`;

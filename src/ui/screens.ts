@@ -3,22 +3,55 @@ import { DIFFICULTIES, KINDS, MODES, POWERS, type Difficulty, type Mode, type Mo
 import type { Summary } from '../game/game';
 import type { WaveBonus } from '../game/scoring';
 import type { WaveSpec } from '../game/waves';
+import {
+  openDialog, showPause, showResults, showStart, toast, sfx,
+  type DialogHandle, type OverlayPromise, type PauseChoice, type ResultsChoice, type StartResult,
+} from '../kit';
 import { iconSvg } from '../render/icons';
 import { paintPortrait } from '../render/mosquitoArt';
 import { drawSwatter, SWATTER_COLORS, SWATTER_SHAPES } from '../render/swatter';
-import { bestKey, type SaveData } from '../storage';
+import { bestKey, type Prefs, type SaveData } from '../storage';
+
+/**
+ * Menus built on the g92 kit overlays/dialogs (start, pause, results, help, achievements,
+ * swatter) + the game's own in-play banners.
+ */
 
 const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const fmt = (n: number): string => n.toLocaleString('cs-CZ');
 
 const MODE_ICON: Record<Mode, string> = { waves: '🌊', minute: '⏱️', zen: '🌼' };
+const DIFF_ICON: Record<Difficulty, string> = { easy: '🐢', normal: '🦟', hard: '🔥' };
+const DIFF_HINT: Record<Difficulty, string> = { easy: '5 srdíček', normal: '3 srdíčka', hard: 'rychlí komáři' };
+
+export type OverlayKind = 'start' | 'pause' | 'results';
+
+function el(html: string): HTMLElement {
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  return t.content.firstElementChild as HTMLElement;
+}
+
+function portraitCanvas(kind: MosquitoKind, size = 56): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  c.width = size * dpr;
+  c.height = size * dpr;
+  c.style.width = `${size}px`;
+  c.style.height = `${size}px`;
+  c.setAttribute('aria-hidden', 'true');
+  paintPortrait(c, kind, dpr);
+  return c;
+}
 
 export interface StartActions {
   play(mode: Mode, difficulty: Difficulty): void;
+  changed(mode: Mode, difficulty: Difficulty): void;
   help(): void;
   achievements(): void;
   swatter(): void;
-  changed(mode: Mode, difficulty: Difficulty): void;
+  /** Swat through the empty space around the panel. */
+  swatAt(e: PointerEvent): void;
 }
 
 export interface PauseActions {
@@ -31,7 +64,7 @@ export interface PauseActions {
 
 export interface ResultActions {
   again(): void;
-  menu(): void;
+  start(): void;
 }
 
 export interface ResultInfo {
@@ -40,451 +73,417 @@ export interface ResultInfo {
   newAchievements: string[];
 }
 
-export interface SwatterActions {
-  change(p: Partial<SaveData['prefs']>): void;
-  back(): void;
-}
-
-function portraitCanvas(kind: MosquitoKind, size = 56): HTMLCanvasElement {
-  const c = document.createElement('canvas');
-  const dpr = Math.min(3, window.devicePixelRatio || 1);
-  c.width = size * dpr;
-  c.height = size * dpr;
-  c.style.width = `${size}px`;
-  c.style.height = `${size}px`;
-  paintPortrait(c, kind, dpr);
-  return c;
-}
-
 export class Screens {
-  private root: HTMLElement;
   private bannerEl: HTMLElement;
-  private toastsEl: HTMLElement;
   private bannerTimer = 0;
-  current: string | null = null;
+  private overlay: OverlayPromise<unknown> | null = null;
+  current: OverlayKind | null = null;
+  private dialogs = 0;
 
-  constructor(root: HTMLElement, banner: HTMLElement, toasts: HTMLElement) {
-    this.root = root;
+  constructor(banner: HTMLElement) {
     this.bannerEl = banner;
-    this.toastsEl = toasts;
-    // Clicks inside screens never reach the canvas.
-    root.addEventListener('pointerdown', (e) => {
-      if (e.target !== root) e.stopPropagation();
+  }
+
+  /** True while a kit dialog (help, achievements…) is open. */
+  get dialogOpen(): boolean {
+    return this.dialogs > 0 || Boolean(document.querySelector('dialog[open]'));
+  }
+
+  /** Closes whatever overlay is open (without resolving any action). */
+  hide(): void {
+    const o = this.overlay;
+    this.overlay = null;
+    this.current = null;
+    o?.close(undefined as never);
+  }
+
+  private track<T>(kind: OverlayKind, p: OverlayPromise<T>, onDone: (v: T) => void): void {
+    this.hide();
+    this.overlay = p as OverlayPromise<unknown>;
+    this.current = kind;
+    void p.then((v) => {
+      if (this.overlay !== (p as OverlayPromise<unknown>)) return; // replaced / hidden programmatically
+      this.overlay = null;
+      this.current = null;
+      if (v !== undefined) onDone(v);
     });
   }
 
-  hide(): void {
-    this.root.hidden = true;
-    this.root.innerHTML = '';
-    this.current = null;
-  }
-
-  private open(name: string, html: string, dim: boolean): HTMLElement {
-    this.current = name;
-    this.root.hidden = false;
-    this.root.classList.toggle('is-dim', dim);
-    this.root.innerHTML = html;
-    this.root.scrollTop = 0;
-    const focus = this.root.querySelector<HTMLElement>('[data-autofocus]');
-    if (focus) requestAnimationFrame(() => focus.focus({ preventScroll: true }));
-    return this.root;
+  /** Resolve the open pause overlay (e.g. from the Space key). */
+  resumeFromKey(): void {
+    if (this.current === 'pause' && this.overlay) (this.overlay as OverlayPromise<PauseChoice>).close('resume');
   }
 
   // ------------------------------------------------------------------ start
 
   showStart(save: SaveData, act: StartActions): void {
-    let mode = save.prefs.mode;
-    let diff = save.prefs.difficulty;
-    const unlocked = Object.keys(save.achievements).length;
+    let mode: Mode = save.prefs.mode;
+    let diff: Difficulty = save.prefs.difficulty;
     const bestLine = (m: Mode, d: Difficulty): string => {
       const b = save.bests[bestKey(m, d)];
-      if (!b) return 'Zatím bez rekordu';
-      if (m === 'zen') return `Rekord: ${fmt(b.kills)} 🦟`;
-      if (m === 'waves') return `Rekord: ${fmt(b.score)} · vlna ${b.wave}`;
-      return `Rekord: ${fmt(b.score)}`;
+      if (!b) return 'Bez rekordu';
+      if (m === 'zen') return `🏆 ${fmt(b.kills)} komárů`;
+      if (m === 'waves') return `🏆 ${fmt(b.score)} · vlna ${b.wave}`;
+      return `🏆 ${fmt(b.score)} bodů`;
     };
-    const root = this.open(
-      'start',
-      `<div class="card" role="dialog" aria-labelledby="start-title">
-        <div class="hero">
-          <canvas data-hero width="168" height="168" aria-hidden="true"></canvas>
-          <div>
-            <h1 id="start-title">Komáři</h1>
-            <p>Bzzz… plácni je dřív, než štípnou!</p>
-          </div>
-        </div>
-        <span class="label" id="mode-label">Režim</span>
-        <div class="modes" role="radiogroup" aria-labelledby="mode-label">
+    const unlocked = Object.keys(save.achievements).length;
+    const extra = el(`<div class="k-start">
+      <div class="k-section">
+        <span class="g92-eyebrow" id="k-mode-label">Režim</span>
+        <div class="k-modes" role="radiogroup" aria-labelledby="k-mode-label">
           ${(Object.keys(MODES) as Mode[])
             .map(
-              (m) => `<button type="button" class="mode" role="radio" data-mode="${m}" aria-checked="${m === mode}">
-                <span class="mode__icon" aria-hidden="true">${MODE_ICON[m]}</span>
+              (m) => `<button type="button" class="k-mode" role="radio" data-mode="${m}" aria-checked="${m === mode}">
+                <span class="k-mode__icon" aria-hidden="true">${MODE_ICON[m]}</span>
                 <b>${MODES[m].name}</b>
                 <small>${esc(MODES[m].desc)}</small>
-                <span class="mode__best" data-best="${m}"></span>
+                <span class="k-mode__best" data-best="${m}"></span>
               </button>`,
             )
             .join('')}
         </div>
-        <span class="label" id="diff-label">Obtížnost</span>
-        <div class="segmented" role="radiogroup" aria-labelledby="diff-label">
-          ${(Object.keys(DIFFICULTIES) as Difficulty[])
-            .map((d) => `<button type="button" role="radio" data-diff="${d}" aria-checked="${d === diff}">${DIFFICULTIES[d].name}</button>`)
-            .join('')}
-        </div>
-        <button type="button" class="btn btn--primary btn--big" data-play data-autofocus>${iconSvg('play', 26)} Hrát</button>
-        <div class="btn-row">
-          <button type="button" class="btn" data-help>${iconSvg('help')}Jak hrát</button>
-          <button type="button" class="btn" data-ach>${iconSvg('trophy')}Úspěchy ${unlocked}/${ACHIEVEMENTS.length}</button>
-          <button type="button" class="btn" data-swatter>${iconSvg('swatter')}Plácačka</button>
-        </div>
-        <p class="foot">${save.stats.totalKills > 0 ? `Celkem zaplácnuto: <b>${fmt(save.stats.totalKills)}</b> komárů` : 'Klikni nebo ťukni na komára. Pozor na červený vykřičník!'}</p>
-      </div>`,
-      false,
-    );
-    const hero = root.querySelector<HTMLCanvasElement>('[data-hero]')!;
-    const dpr = Math.min(3, window.devicePixelRatio || 1);
-    hero.width = 84 * dpr;
-    hero.height = 84 * dpr;
-    paintPortrait(hero, 'common', dpr);
+        <p class="k-mode-desc" data-mode-desc aria-live="polite"></p>
+      </div>
+    </div>`);
+    const more = el(`<div class="k-more">
+      <button type="button" class="g92-btn g92-btn--soft" data-help>${iconSvg('help', 20)}<span>Komáři a vylepšení</span></button>
+      <button type="button" class="g92-btn g92-btn--soft" data-ach>${iconSvg('trophy', 20)}<span>Úspěchy ${unlocked}/${ACHIEVEMENTS.length}</span></button>
+      <button type="button" class="g92-btn g92-btn--soft" data-swatter>${iconSvg('swatter', 20)}<span>Plácačka</span></button>
+    </div>`);
+    const foot = el(`<p class="k-foot">${save.stats.totalKills > 0 ? `Celkem zaplácnuto: <b>${fmt(save.stats.totalKills)}</b> komárů` : 'Tip: zkus plácnout komáry i tady kolem.'}</p>`);
+
+    const p = showStart({
+      appId: 'komari',
+      subtitle: 'Bzzz… plácni je dřív, než štípnou!',
+      backdrop: 'clear',
+      className: 'k-overlay-start',
+      difficulties: (Object.keys(DIFFICULTIES) as Difficulty[]).map((d) => ({ id: d, label: DIFFICULTIES[d].name, icon: DIFF_ICON[d], hint: DIFF_HINT[d] })),
+      difficulty: diff,
+      howTo: [
+        { icon: '👆', text: 'Klikni nebo ťukni na komára – plesk!' },
+        { icon: '❗', text: 'Červený kruh = chce štípnout. Plácni ho včas!' },
+        { icon: '❤️', text: 'Štípnutí bere srdíčko. Dohoň štípala a vrátí se.' },
+        { icon: '🔥', text: 'Rychle za sebou bez minutí = kombo ×2 až ×5.' },
+        { icon: '🫧', text: 'Bublina po komárovi = vylepšení. Plácni na ni!' },
+        { icon: '👑', text: 'Každá pátá vlna: královna komárů.' },
+      ],
+      keys: [
+        { keys: ['←', '↑', '→', '↓'], text: 'posun plácačky' },
+        { keys: ['Enter', 'X'], text: 'plácnout' },
+        { keys: ['Esc', 'P', 'Mezerník'], text: 'pauza' },
+        { keys: ['R'], text: 'hrát znovu' },
+        { keys: ['F'], text: 'celá obrazovka' },
+        { keys: ['M'], text: 'zvuk' },
+      ],
+    });
+    // Kit v0.4: `extra` can't be used with showStart (its actions live inside the view), so insert manually.
+    const view = p.el.querySelector<HTMLElement>('.g92-overlay__view');
+    const actions = view?.querySelector<HTMLElement>(':scope > .g92-overlay__actions');
+    const diffSection = view?.querySelector<HTMLElement>(':scope > .g92-overlay__section');
+    if (view && actions) {
+      view.insertBefore(extra, diffSection ?? actions);
+      actions.append(more);
+      view.append(foot);
+    }
 
     const sync = () => {
-      root.querySelectorAll<HTMLElement>('[data-mode]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === mode)));
-      root.querySelectorAll<HTMLElement>('[data-diff]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.diff === diff)));
-      root.querySelectorAll<HTMLElement>('[data-best]').forEach((el) => (el.textContent = bestLine(el.dataset.best as Mode, diff)));
+      extra.querySelectorAll<HTMLElement>('[data-mode]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === mode)));
+      extra.querySelectorAll<HTMLElement>('[data-best]').forEach((e) => (e.textContent = bestLine(e.dataset.best as Mode, diff)));
+      extra.querySelector<HTMLElement>('[data-mode-desc]')!.textContent = MODES[mode].desc;
       act.changed(mode, diff);
     };
     sync();
-    root.querySelectorAll<HTMLElement>('[data-mode]').forEach((b) =>
+    const modes = Object.keys(MODES) as Mode[];
+    extra.querySelectorAll<HTMLElement>('[data-mode]').forEach((b) => {
       b.addEventListener('click', () => {
         mode = b.dataset.mode as Mode;
+        sfx.click();
         sync();
-      }),
-    );
-    root.querySelectorAll<HTMLElement>('[data-diff]').forEach((b) =>
-      b.addEventListener('click', () => {
-        diff = b.dataset.diff as Difficulty;
+      });
+      b.addEventListener('keydown', (e) => {
+        const i = modes.indexOf(mode);
+        let n = -1;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = (i + 1) % modes.length;
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = (i - 1 + modes.length) % modes.length;
+        if (n < 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        mode = modes[n]!;
         sync();
-      }),
-    );
-    // Arrow keys inside radio groups.
-    const arrows = (sel: string, get: () => string, set: (v: string) => void, values: string[]) => {
-      root.querySelectorAll<HTMLElement>(sel).forEach((b) =>
-        b.addEventListener('keydown', (e) => {
-          const i = values.indexOf(get());
-          let n = -1;
-          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = (i + 1) % values.length;
-          if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = (i - 1 + values.length) % values.length;
-          if (n >= 0) {
-            e.preventDefault();
-            e.stopPropagation();
-            set(values[n]!);
-            sync();
-            root.querySelector<HTMLElement>(`${sel.replace(']', '')}="${values[n]}"]`)?.focus();
-          }
-        }),
-      );
-    };
-    arrows('[data-mode]', () => mode, (v) => (mode = v as Mode), Object.keys(MODES));
-    arrows('[data-diff]', () => diff, (v) => (diff = v as Difficulty), Object.keys(DIFFICULTIES));
-    root.querySelector('[data-play]')!.addEventListener('click', () => act.play(mode, diff));
-    root.querySelector('[data-help]')!.addEventListener('click', () => act.help());
-    root.querySelector('[data-ach]')!.addEventListener('click', () => act.achievements());
-    root.querySelector('[data-swatter]')!.addEventListener('click', () => act.swatter());
+        extra.querySelector<HTMLElement>(`[data-mode="${mode}"]`)?.focus();
+      });
+    });
+    p.el.addEventListener('change', (e) => {
+      const t = e.target as HTMLInputElement;
+      if (t.type === 'radio' && t.value in DIFFICULTIES) {
+        diff = t.value as Difficulty;
+        sync();
+      }
+    });
+    more.querySelector('[data-help]')!.addEventListener('click', () => act.help());
+    more.querySelector('[data-ach]')!.addEventListener('click', () => act.achievements());
+    more.querySelector('[data-swatter]')!.addEventListener('click', () => act.swatter());
+    // Swat the attract-mode mosquitoes around the panel.
+    p.el.addEventListener('pointerdown', (e) => {
+      if (e.target === p.el) act.swatAt(e);
+    });
+    this.track<StartResult>('start', p, (r) => act.play(mode, (r.difficulty as Difficulty | undefined) ?? diff));
   }
 
   // ------------------------------------------------------------------ pause
 
-  showPause(info: { mode: Mode; score: number; wave: number; kills: number }, act: PauseActions): void {
-    const quitLabel = info.mode === 'zen' ? 'Dokončit a ukázat výsledky' : 'Ukončit hru';
-    const root = this.open(
-      'pause',
-      `<div class="card" role="dialog" aria-labelledby="pause-title">
-        <div class="card__head"><h2 id="pause-title">Pauza</h2></div>
-        <p class="lead">${info.mode === 'waves' ? `Vlna ${info.wave} · ` : ''}Skóre ${fmt(info.score)} · zaplácnuto ${fmt(info.kills)}</p>
-        <button type="button" class="btn btn--primary btn--big" data-resume data-autofocus>${iconSvg('play', 24)} Pokračovat</button>
-        <div class="row" style="margin-top:10px">
-          <button type="button" class="btn" data-restart>${iconSvg('restart', 20)} Znovu</button>
-          <button type="button" class="btn" data-help>${iconSvg('help', 20)} Jak hrát</button>
-          <button type="button" class="btn" data-swatter>${iconSvg('settings', 20)} Nastavení</button>
-        </div>
-        <button type="button" class="btn btn--danger" style="width:100%;margin-top:10px" data-quit>${iconSvg('home', 20)} ${quitLabel}</button>
-        <p class="foot">Pokračovat můžeš i klávesou <kbd>Esc</kbd>, <kbd>P</kbd> nebo <kbd>mezerník</kbd>.</p>
-      </div>`,
-      true,
-    );
-    root.querySelector('[data-resume]')!.addEventListener('click', () => act.resume());
-    root.querySelector('[data-restart]')!.addEventListener('click', () => act.restart());
-    root.querySelector('[data-quit]')!.addEventListener('click', () => act.quit());
-    root.querySelector('[data-help]')!.addEventListener('click', () => act.help());
-    root.querySelector('[data-swatter]')!.addEventListener('click', () => act.swatter());
+  showPause(info: { mode: Mode; score: number; wave: number; kills: number; difficulty: Difficulty }, act: PauseActions): void {
+    const stats = [{ label: 'Skóre', value: info.score }];
+    if (info.mode === 'waves') stats.push({ label: 'Vlna', value: info.wave });
+    stats.push({ label: 'Zaplácnuto', value: info.kills });
+    const extra = el(`<div class="k-more k-more--pause">
+      <button type="button" class="g92-btn g92-btn--soft" data-help>${iconSvg('help', 20)}<span>Jak hrát</span></button>
+      <button type="button" class="g92-btn g92-btn--soft" data-swatter>${iconSvg('swatter', 20)}<span>Plácačka</span></button>
+    </div>`);
+    extra.querySelector('[data-help]')!.addEventListener('click', () => act.help());
+    extra.querySelector('[data-swatter]')!.addEventListener('click', () => act.swatter());
+    const p = showPause({
+      subtitle: `${MODES[info.mode].name} · ${DIFFICULTIES[info.difficulty].name}`,
+      stats,
+      menuHref: null,
+      menuLabel: info.mode === 'zen' ? 'Dokončit' : 'Ukončit hru',
+    });
+    // Secondary buttons below the main actions (kit `extra` would put them above "Pokračovat").
+    p.el.querySelector('.g92-overlay__actions')?.append(extra);
+    this.track<PauseChoice>('pause', p, (v) => {
+      if (v === 'resume') act.resume();
+      else if (v === 'restart') act.restart();
+      else act.quit();
+    });
   }
 
   // ------------------------------------------------------------------ results
 
   showResults(s: Summary, info: ResultInfo, act: ResultActions): void {
-    const title =
-      s.mode === 'minute' ? 'Čas vypršel!' : s.mode === 'zen' ? 'Pěkně jsi to vyplácal!' : s.stars >= 3 ? 'Mistr plácačky!' : s.stars >= 1 ? 'Konec hry – dobrá práce!' : 'Komáři vyhráli… tentokrát!';
-    const stars = [0, 1, 2]
-      .map((i) => `<svg class="icon ${i < s.stars ? 'is-on' : ''}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.8l2.9 5.9 6.5.9-4.7 4.6 1.1 6.4L12 17.6l-5.8 3 1.1-6.4-4.7-4.6 6.5-.9z"/></svg>`)
-      .join('');
-    const mainValue = s.mode === 'zen' ? s.kills : s.score;
-    const stat = (label: string, value: string) => `<div class="stat"><small>${label}</small><b>${value}</b></div>`;
-    const stats = [
-      s.mode !== 'zen' ? stat('Zaplácnuto', fmt(s.kills)) : stat('Skóre', fmt(s.score)),
-      s.mode === 'waves' ? stat('Vlna', String(s.wave)) : '',
-      stat('Nejlepší kombo', String(s.bestCombo)),
-      stat('Přesnost', `${Math.round(s.accuracy * 100)} %`),
-      s.mode !== 'zen' ? stat('Štípanců', String(s.bites)) : '',
-    ].join('');
-    const ach = info.newAchievements
-      .map((id) => achievementById(id))
-      .filter((a): a is NonNullable<typeof a> => Boolean(a))
-      .map((a) => `<div><span aria-hidden="true">${a.icon}</span> Nový úspěch: ${esc(a.title)}</div>`)
-      .join('');
-    const root = this.open(
-      'results',
-      `<div class="card" role="dialog" aria-labelledby="res-title">
-        <h2 class="result-title" id="res-title">${title}</h2>
-        <div class="stars" role="img" aria-label="${s.stars} ze 3 hvězd">${stars}</div>
-        <div class="big-score" aria-label="${s.mode === 'zen' ? 'Zaplácnuto' : 'Skóre'}">${fmt(mainValue)}${s.mode === 'zen' ? ' 🦟' : ''}</div>
-        <span class="record ${info.isRecord ? 'is-new' : ''}">${info.isRecord ? '🏆 Nový rekord!' : `Rekord: ${fmt(info.best)}`}</span>
-        <div class="stat-grid">${stats}</div>
-        ${ach ? `<div class="new-ach">${ach}</div>` : ''}
-        <div class="row" style="margin-top:16px">
-          <button type="button" class="btn btn--primary" data-again data-autofocus>${iconSvg('restart', 20)} Hrát znovu</button>
-          <button type="button" class="btn" data-menu>${iconSvg('home', 20)} Hlavní obrazovka</button>
-        </div>
-      </div>`,
-      true,
-    );
-    root.querySelector('[data-again]')!.addEventListener('click', () => act.again());
-    root.querySelector('[data-menu]')!.addEventListener('click', () => act.menu());
+    const stat = (label: string, value: string | number) => ({ label, value });
+    const time = `${Math.floor(s.duration / 60)}:${String(Math.floor(s.duration % 60)).padStart(2, '0')}`;
+    const acc = `${Math.round(s.accuracy * 100)} %`;
+    const powers = String(s.powers.length);
+    const stats =
+      s.mode === 'waves'
+        ? [stat('Zaplácnuto', s.kills), stat('Vlna', s.wave), stat('Kombo', s.bestCombo), stat('Přesnost', acc), stat('Štípanců', s.bites), stat('Čas', time)]
+        : s.mode === 'minute'
+          ? [stat('Zaplácnuto', s.kills), stat('Kombo', s.bestCombo), stat('Přesnost', acc), stat('Štípanců', s.bites), stat('Jednou ranou', s.maxMulti), stat('Vylepšení', powers)]
+          : [stat('Skóre', s.score), stat('Kombo', s.bestCombo), stat('Přesnost', acc), stat('Jednou ranou', s.maxMulti), stat('Vylepšení', powers), stat('Čas', time)];
+    const title = info.isRecord
+      ? 'Nový rekord!'
+      : s.mode === 'minute'
+        ? 'Čas vypršel!'
+        : s.mode === 'zen'
+          ? 'Pěkně vyplácáno!'
+          : s.stars >= 3
+            ? 'Mistr plácačky!'
+            : s.stars >= 1
+              ? 'Dobrá práce!'
+              : 'Komáři vyhráli… zatím!';
+    const achs = info.newAchievements.map((id) => achievementById(id)).filter((a): a is NonNullable<typeof a> => Boolean(a));
+    const extra = achs.length
+      ? el(`<div class="k-newach">${achs.map((a) => `<div><span aria-hidden="true">${a.icon}</span> Nový úspěch: <b>${esc(a.title)}</b></div>`).join('')}</div>`)
+      : undefined;
+    const p = showResults({
+      title,
+      subtitle: `${MODES[s.mode].name} · ${DIFFICULTIES[s.difficulty].name}`,
+      score: s.mode === 'zen' ? s.kills : s.score,
+      scoreLabel: s.mode === 'zen' ? 'komárů' : 'bodů',
+      best: info.best,
+      isNewBest: info.isRecord,
+      stars: s.stars,
+      stats,
+      lost: s.mode === 'waves' && s.stars === 0 && !info.isRecord,
+      actions: [{ label: 'Úvod', value: 'start', variant: 'soft', icon: iconSvg('home', 20) }],
+      extra,
+    });
+    this.track<ResultsChoice>('results', p, (v) => {
+      if (v === 'again') act.again();
+      else if (v === 'start') act.start();
+      // 'menu' navigates to /menu/ by itself.
+    });
   }
 
-  // ------------------------------------------------------------------ help
+  // ------------------------------------------------------------------ dialogs
 
-  showHelp(back: () => void): void {
+  private dialog(title: string, content: Node, icon: string, wide = true): DialogHandle {
+    this.dialogs++;
+    const d = openDialog({ title, content, wide, icon, actions: [{ label: 'Zavřít', value: 'ok', variant: 'primary' }] });
+    void d.closed.then(() => {
+      this.dialogs = Math.max(0, this.dialogs - 1);
+    });
+    return d;
+  }
+
+  showHelp(): DialogHandle {
     const kinds: MosquitoKind[] = ['common', 'fast', 'tiger', 'ninja', 'fat', 'golden', 'queen'];
     const powers: PowerKind[] = ['big', 'electric', 'spray', 'lamp', 'net', 'frost', 'heart', 'time'];
-    const root = this.open(
-      'help',
-      `<div class="card card--wide" role="dialog" aria-labelledby="help-title">
-        <div class="card__head">
-          <button type="button" class="icon-btn" data-back aria-label="Zpět">${iconSvg('back')}</button>
-          <h2 id="help-title">Jak hrát</h2>
-        </div>
-        <div class="help-grid">
-          <div class="help-item"><span class="help-ico" aria-hidden="true">👆</span><div><b>Plácni na komára</b><small>Klikni myší nebo ťukni prstem. Trefíš i víc najednou!</small></div></div>
-          <div class="help-item"><span class="help-ico" aria-hidden="true" style="color:#ef4444;font-weight:900">!</span><div><b>Červený kruh = chce štípnout</b><small>Komár se zvětšuje a letí na tebe. Plácni ho, než se kruh uzavře.</small></div></div>
-          <div class="help-item"><span class="help-ico" aria-hidden="true">❤️</span><div><b>Štípnutí bere srdíčko</b><small>Dohoníš-li komára, který tě štípl (je červený a pomalý), srdíčko se vrátí.</small></div></div>
-          <div class="help-item"><span class="help-ico" aria-hidden="true">🔥</span><div><b>Kombo násobí body</b><small>Plácej rychle za sebou bez minutí: ×2, ×3, ×4, ×5!</small></div></div>
-          <div class="help-item"><span class="help-ico" aria-hidden="true">🫧</span><div><b>Bubliny s vylepšením</b><small>Občas po komárovi zůstane bublina. Plácni na ni!</small></div></div>
-        </div>
-        <h3 class="section-title">Komáři</h3>
-        <div class="kinds-grid" data-kinds></div>
-        <h3 class="section-title">Vylepšení</h3>
-        <div class="powers-grid">
-          ${powers
-            .map(
-              (p) => `<div class="help-item"><span class="help-ico" style="color:${POWERS[p].color}">${iconSvg(p, 30)}</span><div><b>${POWERS[p].name}</b><small>${esc(POWERS[p].desc)}</small></div></div>`,
-            )
-            .join('')}
-        </div>
-        <h3 class="section-title">Klávesnice</h3>
-        <div class="keys">
-          <span><kbd>←</kbd> <kbd>↑</kbd> <kbd>→</kbd> <kbd>↓</kbd> / <kbd>WASD</kbd></span><span>posun plácačky</span>
-          <span><kbd>Enter</kbd> / <kbd>X</kbd> / <kbd>K</kbd></span><span>plácnout</span>
-          <span><kbd>Esc</kbd> / <kbd>P</kbd> / <kbd>mezerník</kbd></span><span>pauza</span>
-          <span><kbd>R</kbd></span><span>hrát znovu</span>
-          <span><kbd>F</kbd></span><span>celá obrazovka</span>
-          <span><kbd>M</kbd></span><span>zvuk zap/vyp</span>
-        </div>
-        <button type="button" class="btn btn--primary btn--big" data-back2 data-autofocus>Rozumím</button>
-      </div>`,
-      true,
-    );
+    const root = el(`<div class="k-help">
+      <div class="k-help-grid">
+        <div class="k-help-item"><span class="k-help-ico" aria-hidden="true">👆</span><div><b>Plácni na komára</b><small>Klikni myší nebo ťukni prstem. Trefíš i víc najednou!</small></div></div>
+        <div class="k-help-item"><span class="k-help-ico k-help-ico--warn" aria-hidden="true">!</span><div><b>Červený kruh = chce štípnout</b><small>Komár se zvětšuje a letí na tebe. Plácni ho, než se kruh uzavře.</small></div></div>
+        <div class="k-help-item"><span class="k-help-ico" aria-hidden="true">❤️</span><div><b>Štípnutí bere srdíčko</b><small>Štípal zčervená a pomalu odlétá. Když ho dostihneš, srdíčko se vrátí.</small></div></div>
+        <div class="k-help-item"><span class="k-help-ico" aria-hidden="true">🔥</span><div><b>Kombo násobí body</b><small>Plácej rychle za sebou a nemiň: ×2, ×3, ×4, ×5!</small></div></div>
+      </div>
+      <h3 class="k-h3">Komáři</h3>
+      <div class="k-cards" data-kinds></div>
+      <h3 class="k-h3">Vylepšení</h3>
+      <div class="k-cards">
+        ${powers
+          .map(
+            (p) => `<div class="k-help-item"><span class="k-help-ico" style="color:${POWERS[p].color}">${iconSvg(p, 30)}</span><div><b>${POWERS[p].name}</b><small>${esc(POWERS[p].desc)}${p === 'time' ? ' (jen v Minutovce)' : p === 'heart' || p === 'net' ? ' (ve Vlnách)' : ''}</small></div></div>`,
+          )
+          .join('')}
+      </div>
+    </div>`);
     const grid = root.querySelector<HTMLElement>('[data-kinds]')!;
     for (const k of kinds) {
-      const item = document.createElement('div');
-      item.className = 'help-item';
-      item.appendChild(portraitCanvas(k));
-      const text = document.createElement('div');
-      text.innerHTML = `<b>${KINDS[k].name}</b><small>${esc(KINDS[k].desc)} · ${KINDS[k].points} b.</small>`;
-      item.appendChild(text);
+      const item = el(`<div class="k-help-item"><div><b>${KINDS[k].name}</b><small>${esc(KINDS[k].desc)} · ${KINDS[k].points} b.</small></div></div>`);
+      item.prepend(portraitCanvas(k));
       grid.appendChild(item);
     }
-    root.querySelector('[data-back]')!.addEventListener('click', back);
-    root.querySelector('[data-back2]')!.addEventListener('click', back);
+    return this.dialog('Komáři a vylepšení', root, iconSvg('help'));
   }
 
-  // ------------------------------------------------------------------ achievements
-
-  showAchievements(save: SaveData, back: () => void): void {
+  showAchievements(save: SaveData): DialogHandle {
     const n = Object.keys(save.achievements).length;
     const items = ACHIEVEMENTS.map((a) => {
       const got = save.achievements[a.id];
       const date = got ? new Date(got).toLocaleDateString('cs-CZ') : '';
-      return `<div class="ach ${got ? '' : 'is-locked'}">
-        <span class="ach__icon" aria-hidden="true">${a.icon}</span>
+      return `<div class="k-ach ${got ? '' : 'is-locked'}">
+        <span class="k-ach__icon" aria-hidden="true">${a.icon}</span>
         <div><b>${esc(a.title)}</b><small>${esc(a.desc)}${got ? ` · ${date}` : ''}</small></div>
       </div>`;
     }).join('');
     const bests = (['waves', 'minute', 'zen'] as Mode[])
-      .map((m) => {
-        const cells = (['easy', 'normal', 'hard'] as Difficulty[])
+      .map((m) =>
+        (['easy', 'normal', 'hard'] as Difficulty[])
           .map((d) => {
             const b = save.bests[bestKey(m, d)];
             const v = b ? (m === 'zen' ? `${fmt(b.kills)} 🦟` : fmt(b.score)) : '–';
-            return `<div class="stat"><small>${MODES[m].name} · ${DIFFICULTIES[d].name}</small><b>${v}</b></div>`;
+            return `<div class="k-stat"><small>${MODES[m].name} · ${DIFFICULTIES[d].name}</small><b>${v}</b></div>`;
           })
-          .join('');
-        return cells;
-      })
+          .join(''),
+      )
       .join('');
-    const root = this.open(
-      'achievements',
-      `<div class="card card--wide" role="dialog" aria-labelledby="ach-title">
-        <div class="card__head">
-          <button type="button" class="icon-btn" data-back aria-label="Zpět">${iconSvg('back')}</button>
-          <h2 id="ach-title">Úspěchy</h2>
-        </div>
-        <div class="ach-progress">
-          <p class="lead" style="margin-bottom:6px">Získáno ${n} z ${ACHIEVEMENTS.length}. Některé odemykají nové plácačky!</p>
-          <div class="progress"><span style="width:${Math.round((n / ACHIEVEMENTS.length) * 100)}%"></span></div>
-        </div>
-        <div class="ach-grid">${items}</div>
-        <h3 class="section-title">Rekordy</h3>
-        <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${bests}</div>
-        <div class="stat-grid">
-          <div class="stat"><small>Celkem komárů</small><b>${fmt(save.stats.totalKills)}</b></div>
-          <div class="stat"><small>Odehraných her</small><b>${fmt(save.stats.games)}</b></div>
-          <div class="stat"><small>Nejlepší kombo</small><b>${save.stats.bestCombo}</b></div>
-          <div class="stat"><small>Čas hraní</small><b>${Math.round(save.stats.playSeconds / 60)} min</b></div>
-        </div>
-        <button type="button" class="btn btn--primary btn--big" data-back2 data-autofocus>Zpět</button>
-      </div>`,
-      true,
-    );
-    root.querySelector('[data-back]')!.addEventListener('click', back);
-    root.querySelector('[data-back2]')!.addEventListener('click', back);
+    const root = el(`<div class="k-achs">
+      <p class="k-lead">Získáno <b>${n}</b> z ${ACHIEVEMENTS.length}. Některé odemykají nové plácačky!</p>
+      <div class="g92-progress" style="--value:${(n / ACHIEVEMENTS.length).toFixed(3)}"></div>
+      <div class="k-cards k-cards--ach">${items}</div>
+      <h3 class="k-h3">Rekordy</h3>
+      <div class="k-stats">${bests}</div>
+      <h3 class="k-h3">Statistiky</h3>
+      <div class="k-stats">
+        <div class="k-stat"><small>Celkem komárů</small><b>${fmt(save.stats.totalKills)}</b></div>
+        <div class="k-stat"><small>Odehraných her</small><b>${fmt(save.stats.games)}</b></div>
+        <div class="k-stat"><small>Nejlepší kombo</small><b>${save.stats.bestCombo}</b></div>
+        <div class="k-stat"><small>Čas hraní</small><b>${Math.round(save.stats.playSeconds / 60)} min</b></div>
+      </div>
+    </div>`);
+    return this.dialog('Úspěchy a rekordy', root, iconSvg('trophy'));
   }
 
-  // ------------------------------------------------------------------ swatter & settings
-
-  showSwatter(save: SaveData, act: SwatterActions): void {
+  /** Swatter look + game toggles (also embedded in the kit settings dialog). */
+  swatterPanel(save: SaveData, change: (p: Partial<Prefs>) => void, compact = false): HTMLElement {
     const has = (id: string | null) => id === null || Boolean(save.achievements[id]);
     const p = save.prefs;
-    const isPreset = SWATTER_COLORS.some((c) => c.color === p.color);
-    const root = this.open(
-      'swatter',
-      `<div class="card" role="dialog" aria-labelledby="sw-title">
-        <div class="card__head">
-          <button type="button" class="icon-btn" data-back aria-label="Zpět">${iconSvg('back')}</button>
-          <h2 id="sw-title">Plácačka a nastavení</h2>
-        </div>
-        <div class="swatter-preview"><canvas data-preview width="400" height="360" aria-label="Náhled plácačky" role="img"></canvas></div>
-        <span class="label" id="shape-label">Tvar</span>
-        <div class="shapes" role="radiogroup" aria-labelledby="shape-label">
-          ${SWATTER_SHAPES.map((s) => {
-            const ok = has(s.unlock);
-            const req = s.unlock ? achievementById(s.unlock)?.title ?? '' : '';
-            return `<button type="button" class="shape-btn" role="radio" data-shape="${s.id}" aria-checked="${p.shape === s.id}" ${ok ? '' : `disabled title="Odemkneš úspěchem: ${esc(req)}"`}>
-              ${ok ? '' : iconSvg('lock', 16)}${s.name}${ok ? '' : `<small>${esc(req)}</small>`}</button>`;
-          }).join('')}
-        </div>
-        <span class="label" id="color-label">Barva</span>
-        <div class="swatches" role="radiogroup" aria-labelledby="color-label">
-          ${SWATTER_COLORS.map((c) => {
-            const ok = has(c.unlock);
-            const req = c.unlock ? achievementById(c.unlock)?.title ?? '' : '';
-            return `<button type="button" class="swatch" role="radio" style="--c:${c.color}" data-color="${c.color}" aria-checked="${p.color === c.color}" aria-label="${c.name}${ok ? '' : ` (zamčeno – úspěch ${esc(req)})`}" title="${ok ? c.name : `Odemkneš úspěchem: ${esc(req)}`}" ${ok ? '' : 'disabled'}>${ok ? '' : iconSvg('lock', 20)}</button>`;
-          }).join('')}
-          <label class="swatch swatch--custom" title="Vlastní barva" aria-checked="${!isPreset}" role="radio">
-            <input type="color" data-custom value="${p.color}" aria-label="Vlastní barva" />
-          </label>
-        </div>
-        <span class="label">Hra</span>
-        <div class="toggles">
-          <label class="toggle"><span>Krvavé fleky<small>Vypni pro citlivější hráče – místo krve šedé šmouhy.</small></span><input type="checkbox" data-blood ${p.blood ? 'checked' : ''} /></label>
-          <label class="toggle"><span>Bzučení komárů<small>Čím blíž komár, tím hlasitěji bzučí.</small></span><input type="checkbox" data-buzz ${p.buzz ? 'checked' : ''} /></label>
-        </div>
-        <button type="button" class="btn btn--primary btn--big" data-back2 data-autofocus>Hotovo</button>
-      </div>`,
-      true,
-    );
-    const canvas = root.querySelector<HTMLCanvasElement>('[data-preview]')!;
+    const uid = Math.random().toString(36).slice(2, 7);
+    const root = el(`<div class="k-swatter">
+      ${compact ? '' : `<div class="k-swatter__preview"><canvas data-preview aria-label="Náhled plácačky" role="img"></canvas></div>`}
+      <span class="g92-label" id="k-shape-${uid}">Tvar plácačky</span>
+      <div class="k-shapes" role="radiogroup" aria-labelledby="k-shape-${uid}">
+        ${SWATTER_SHAPES.map((s) => {
+          const ok = has(s.unlock);
+          const req = s.unlock ? achievementById(s.unlock)?.title ?? '' : '';
+          return `<button type="button" class="k-shape" role="radio" data-shape="${s.id}" aria-checked="${p.shape === s.id}" ${ok ? '' : `disabled title="Odemkneš úspěchem „${esc(req)}“"`}>
+            ${ok ? '' : iconSvg('lock', 16)}<span>${s.name}</span>${ok ? '' : `<small>${esc(req)}</small>`}</button>`;
+        }).join('')}
+      </div>
+      <span class="g92-label" id="k-color-${uid}">Barva</span>
+      <div class="k-swatches" role="radiogroup" aria-labelledby="k-color-${uid}">
+        ${SWATTER_COLORS.map((c) => {
+          const ok = has(c.unlock);
+          const req = c.unlock ? achievementById(c.unlock)?.title ?? '' : '';
+          return `<button type="button" class="k-swatch" role="radio" style="--c:${c.color}" data-color="${c.color}" aria-checked="${p.color === c.color}" aria-label="${c.name}${ok ? '' : ` – zamčeno, úspěch „${esc(req)}“`}" title="${ok ? c.name : `Odemkneš úspěchem „${esc(req)}“`}" ${ok ? '' : 'disabled'}>${ok ? '' : iconSvg('lock', 18)}</button>`;
+        }).join('')}
+        <label class="k-swatch k-swatch--custom" title="Vlastní barva"><input type="color" data-custom value="${p.color}" aria-label="Vlastní barva" /></label>
+      </div>
+      <label class="g92-switch-row k-switch"><span>Krvavé fleky<small>Vypnuto = šedé šmouhy místo krve.</small></span><input type="checkbox" class="g92-toggle" role="switch" data-blood ${p.blood ? 'checked' : ''} /></label>
+      <label class="g92-switch-row k-switch"><span>Bzučení komárů<small>Čím blíž komár, tím hlasitěji bzučí.</small></span><input type="checkbox" class="g92-toggle" role="switch" data-buzz ${p.buzz ? 'checked' : ''} /></label>
+    </div>`);
+    const canvas = root.querySelector<HTMLCanvasElement>('[data-preview]');
     const draw = () => {
+      if (!canvas) return;
       const dpr = Math.min(3, window.devicePixelRatio || 1);
       canvas.width = 200 * dpr;
-      canvas.height = 180 * dpr;
+      canvas.height = 170 * dpr;
       const g = canvas.getContext('2d')!;
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
-      g.clearRect(0, 0, 200, 180);
-      g.translate(100, 66);
-      drawSwatter(g, 38, { shape: p.shape, color: p.color, electric: false, big: false }, 0, 0);
+      g.clearRect(0, 0, 200, 170);
+      g.translate(100, 62);
+      drawSwatter(g, 36, { shape: p.shape, color: p.color, electric: false, big: false }, 0, 0);
     };
     draw();
     const sync = () => {
       root.querySelectorAll<HTMLElement>('[data-shape]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.shape === p.shape)));
       root.querySelectorAll<HTMLElement>('[data-color]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.color === p.color)));
-      root.querySelector('.swatch--custom')!.setAttribute('aria-checked', String(!SWATTER_COLORS.some((c) => c.color === p.color)));
+      root.querySelector('.k-swatch--custom')!.classList.toggle('is-on', !SWATTER_COLORS.some((c) => c.color === p.color));
       draw();
     };
+    sync();
     root.querySelectorAll<HTMLButtonElement>('[data-shape]').forEach((b) =>
       b.addEventListener('click', () => {
-        p.shape = b.dataset.shape as typeof p.shape;
-        act.change({ shape: p.shape });
+        p.shape = b.dataset.shape as Prefs['shape'];
+        sfx.click();
+        change({ shape: p.shape });
         sync();
       }),
     );
     root.querySelectorAll<HTMLButtonElement>('[data-color]').forEach((b) =>
       b.addEventListener('click', () => {
         p.color = b.dataset.color!;
-        act.change({ color: p.color });
+        sfx.click();
+        change({ color: p.color });
         sync();
       }),
     );
     root.querySelector<HTMLInputElement>('[data-custom]')!.addEventListener('input', (e) => {
       p.color = (e.target as HTMLInputElement).value;
-      act.change({ color: p.color });
+      change({ color: p.color });
       sync();
     });
-    root.querySelector<HTMLInputElement>('[data-blood]')!.addEventListener('change', (e) => act.change({ blood: (e.target as HTMLInputElement).checked }));
-    root.querySelector<HTMLInputElement>('[data-buzz]')!.addEventListener('change', (e) => act.change({ buzz: (e.target as HTMLInputElement).checked }));
-    root.querySelector('[data-back]')!.addEventListener('click', act.back);
-    root.querySelector('[data-back2]')!.addEventListener('click', act.back);
+    root.querySelector<HTMLInputElement>('[data-blood]')!.addEventListener('change', (e) => change({ blood: (e.target as HTMLInputElement).checked }));
+    root.querySelector<HTMLInputElement>('[data-buzz]')!.addEventListener('change', (e) => change({ buzz: (e.target as HTMLInputElement).checked }));
+    return root;
   }
 
-  // ------------------------------------------------------------------ banners & toasts
+  showSwatter(save: SaveData, change: (p: Partial<Prefs>) => void): DialogHandle {
+    return this.dialog('Plácačka', this.swatterPanel(save, change), iconSvg('swatter'), false);
+  }
+
+  // ------------------------------------------------------------------ in-game banners & toasts
 
   bannerWave(spec: WaveSpec | null, mode: Mode, wave: number): void {
     let html: string;
     let boss = false;
-    if (mode === 'minute') {
-      html = `<div class="banner__card"><div class="banner__kicker">Minutovka</div><div class="banner__title">Připrav se!</div><div class="banner__sub">Máš 60 vteřin. Štípnutí bere 3 vteřiny.</div></div>`;
-    } else if (mode === 'zen') {
-      html = `<div class="banner__card"><div class="banner__kicker">Pohoda</div><div class="banner__title">Plácej v klidu</div><div class="banner__sub">Tady nikdo neštípe. Až budeš chtít skončit, dej pauzu.</div></div>`;
+    if (mode === 'zen') {
+      html = `<div class="banner__card"><div class="banner__kicker">Pohoda</div><div class="banner__title">Plácej v klidu</div><div class="banner__sub">Nikdo tu neštípe. Až budeš chtít skončit, dej pauzu.</div></div>`;
+    } else if (mode === 'minute') {
+      return; // the kit countdown covers the start
     } else {
       boss = Boolean(spec?.boss);
       const sub = boss ? 'Plácej královnu, dokud nepadne! Pozor na její komáry.' : `Zaplácni ${spec?.quota ?? 0} komárů`;
-      html = `<div class="banner__card"><div class="banner__kicker">${boss ? 'Pozor, boss!' : 'Připrav se'}</div><div class="banner__title">Vlna ${wave}</div><div class="banner__sub">${sub}</div><div data-new></div></div>`;
+      html = `<div class="banner__card"><div class="banner__kicker">${boss ? 'Pozor, královna!' : 'Připrav se'}</div><div class="banner__title">Vlna ${wave}</div><div class="banner__sub">${sub}</div><div data-new></div></div>`;
     }
     this.showBanner(html, boss, mode === 'waves' && spec && spec.newKinds.length > 0 ? 2800 : 2000);
     if (spec && mode === 'waves') {
       const holder = this.bannerEl.querySelector<HTMLElement>('[data-new]');
-      const kinds = spec.newKinds.filter((k) => k !== 'queen');
-      if (holder && (kinds.length > 0 || spec.boss)) {
-        const k = spec.boss && spec.newKinds.includes('queen') ? 'queen' : kinds[0];
-        if (k) {
-          const box = document.createElement('div');
-          box.className = 'banner__new';
-          box.appendChild(portraitCanvas(k, 64));
-          const t = document.createElement('div');
-          t.innerHTML = `<small>Nový komár</small><b>${KINDS[k].name}</b><span>${esc(KINDS[k].desc)}</span>`;
-          box.appendChild(t);
-          holder.appendChild(box);
-        }
+      const k = spec.newKinds.includes('queen') ? 'queen' : spec.newKinds[0];
+      if (holder && k) {
+        const box = el(`<div class="banner__new"><div><small>Nový komár</small><b>${KINDS[k].name}</b><span>${esc(KINDS[k].desc)}</span></div></div>`);
+        box.prepend(portraitCanvas(k, 64));
+        holder.appendChild(box);
       }
     }
   }
@@ -500,10 +499,6 @@ export class Screens {
       false,
       2400,
     );
-  }
-
-  bannerText(kicker: string, title: string, ms = 1400): void {
-    this.showBanner(`<div class="banner__card"><div class="banner__kicker">${esc(kicker)}</div><div class="banner__title">${esc(title)}</div></div>`, false, ms);
   }
 
   private showBanner(html: string, boss: boolean, ms: number): void {
@@ -523,10 +518,6 @@ export class Screens {
   toastAchievement(id: string): void {
     const a = achievementById(id);
     if (!a) return;
-    const el = document.createElement('div');
-    el.className = 'toast';
-    el.innerHTML = `<span class="toast__icon" aria-hidden="true">${a.icon}</span><div><small>Nový úspěch</small><b>${esc(a.title)}</b></div>`;
-    this.toastsEl.appendChild(el);
-    window.setTimeout(() => el.remove(), 4000);
+    toast(`Nový úspěch: ${a.title}`, { variant: 'accent', icon: `<span style="font-size:20px;line-height:22px">${a.icon}</span>`, duration: 3200 });
   }
 }

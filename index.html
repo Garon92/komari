@@ -2,10 +2,10 @@
 <html lang="cs">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Komáři – plácni je dřív, než štípnou!</title>
-    <meta name="description" content="Arkádová hra s plácačkou: vlny komárů, královna, kombo, vylepšení, úspěchy. Pro děti i dospělé." />
-    <meta name="theme-color" content="#4fe18c" />
+    <meta name="description" content="Arkádová hra s plácačkou: vlny komárů, královna, kombo, vylepšení a úspěchy. Pro děti i dospělé." />
+    <meta name="theme-color" content="#22c55e" />
     <meta name="color-scheme" content="light dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -13,25 +13,13 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
-  <body>
-    <header class="appbar" id="appbar">
-      <a class="appbar__back" href="/menu/" aria-label="Zpět do menu">
-        <svg class="icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-        Menu
-      </a>
-      <div class="appbar__title">
-        <span class="appbar__logo" aria-hidden="true">🦟</span>
-        <span>Komáři</span>
-      </div>
-      <div class="appbar__actions" id="appbar-actions"></div>
-    </header>
+  <body class="g92-app">
+    <g92-appbar app="komari" fullscreen help></g92-appbar>
 
-    <main class="stage" id="stage">
+    <main class="stage g92-no-touch-scroll" id="stage">
       <canvas id="game" role="img" aria-label="Hrací plocha – plácej komáry"></canvas>
       <div class="hud" id="hud" hidden></div>
       <div class="banner" id="banner" hidden aria-live="polite"></div>
-      <div class="toasts" id="toasts" aria-live="polite"></div>
-      <section class="screen" id="screen" aria-live="polite"></section>
     </main>
 
     <noscript>Tahle hra potřebuje zapnutý JavaScript.</noscript>
