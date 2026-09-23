@@ -330,6 +330,11 @@ export class Screens {
       extra,
       className: 'k-overlay-results',
     });
+    // New achievements/rank belong to the "hero" half (left column on landscape phones),
+    // so the stats and "Hrát znovu" stay visible on the right.
+    const hero = p.el.querySelector<HTMLElement>('.g92-overlay__hero');
+    const extraWrap = p.el.querySelector<HTMLElement>('.g92-overlay__extra');
+    if (hero && extraWrap) hero.append(extraWrap);
     this.track<ResultsChoice>('results', p, (v) => {
       if (v === 'again') act.again();
       else if (v === 'start') act.start();
