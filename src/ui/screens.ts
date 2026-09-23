@@ -407,6 +407,7 @@ export class Screens {
       <div class="k-stats">${bests}</div>
       <h3 class="k-h3">Statistiky</h3>
       <div class="k-stats">
+        <div class="k-stat"><small>Hodnost</small><b>${rankFor(save.stats.totalKills).rank.icon} ${esc(rankFor(save.stats.totalKills).rank.name)}</b></div>
         <div class="k-stat"><small>Celkem komárů</small><b>${fmt(save.stats.totalKills)}</b></div>
         <div class="k-stat"><small>Odehraných her</small><b>${fmt(save.stats.games)}</b></div>
         <div class="k-stat"><small>Nejlepší kombo</small><b>${save.stats.bestCombo}</b></div>
