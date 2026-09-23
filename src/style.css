@@ -499,6 +499,15 @@ body {
   white-space: normal;
 }
 
+.k-more--4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.k-more .g92-btn svg {
+  width: 22px;
+  height: 22px;
+}
+
 .k-more--pause {
   grid-template-columns: repeat(2, 1fr);
 }

@@ -4,7 +4,7 @@ import type { Summary } from '../game/game';
 import type { WaveBonus } from '../game/scoring';
 import type { WaveSpec } from '../game/waves';
 import {
-  openDialog, showPause, showResults, showStart, toast, sfx,
+  ICONS, openDialog, showPause, showResults, showStart, toast, sfx,
   type DialogHandle, type OverlayPromise, type PauseChoice, type ResultsChoice, type StartResult,
 } from '../kit';
 import { iconSvg } from '../render/icons';
@@ -146,7 +146,7 @@ export class Screens {
       </div>
     </div>`);
     const more = el(`<div class="k-more">
-      <button type="button" class="g92-btn g92-btn--soft" data-help>${iconSvg('help', 20)}<span>Komáři a vylepšení</span></button>
+      <button type="button" class="g92-btn g92-btn--soft" data-help>${ICONS.komari}<span>Komáři</span></button>
       <button type="button" class="g92-btn g92-btn--soft" data-ach>${iconSvg('trophy', 20)}<span>Úspěchy ${unlocked}/${ACHIEVEMENTS.length}</span></button>
       <button type="button" class="g92-btn g92-btn--soft" data-swatter>${iconSvg('swatter', 20)}<span>Plácačka</span></button>
     </div>`);
@@ -185,6 +185,13 @@ export class Screens {
       view.insertBefore(extra, diffSection ?? actions);
       actions.append(more);
       view.append(foot);
+      // Pull the kit's "Jak hrát" button into our row of small buttons (saves a full-width row).
+      const how = actions.querySelector<HTMLElement>(':scope > .g92-btn--secondary');
+      if (how) {
+        how.className = 'g92-btn g92-btn--soft';
+        more.prepend(how);
+        more.classList.add('k-more--4');
+      }
     }
 
     const sync = () => {
