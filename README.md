@@ -78,6 +78,6 @@ Struktura `src/`:
 - `kit/` – vendorovaný g92 kit (**needitovat**, synchronizuje se `menu/kit/sync.sh`)
 
 Ladicí háček: `?debug` v URL zpřístupní `window.__komari` (stav hry, `swat(x, y)`, `jump(vlna)`…).
-Skripty `scripts/playtest.mjs` a `scripts/scenes.mjs` hru headless „hrají“ a fotí (playwright-core).
+Skripty `scripts/playtest.mjs`, `scripts/keyboard.mjs`, `scripts/shots.mjs`, `scripts/landscape.mjs` a `scripts/scenes.mjs` hru headless „hrají“ a fotí (playwright-core). Balanční simulace: `BALANCE=1 npx vitest run src/game/balance.test.ts`.
 
 Nasazení: GitHub Actions (`.github/workflows/deploy.yml`) → GitHub Pages.
