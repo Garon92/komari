@@ -51,11 +51,12 @@ Hra se sama pozastaví, když přepneš záložku nebo okno.
 
 ### Úspěchy a plácačky
 
-21 úspěchů (např. *Dvojplesk*, *Královrah*, *Bez štípance*, *Tisícovka*). Některé odemykají nové
+21 úspěchů (např. *Dvojplesk*, *Přemožitel královny*, *Bez štípance*, *Tisícovka*). Některé odemykají nové
 tvary a barvy plácačky (Srdíčko, Hvězda, Zlatá…). Rekordy se ukládají zvlášť pro každý režim a obtížnost.
 Za všechny zaplácnuté komáry roste **hodnost lovce** (Nováček → Plácal → Lovec komárů → Postrach komárů →
 Mistr plácačky → Legenda → Komáří noční můra).
-V nastavení (⚙) jde vypnout krvavé fleky (šedé šmouhy místo krve) a bzučení komárů.
+Ve výchozím stavu je hra pohádková: zaplácnutý komár udělá „pof!“ s hvězdičkami. Starší hráči si v nastavení (⚙)
+mohou zapnout realistické krvavé fleky; v Pohodě (pro nejmenší) se krev neukazuje nikdy. Bzučení komárů jde vypnout.
 
 ## Vývoj
 

@@ -4,7 +4,7 @@ import type { Summary } from '../game/game';
 import type { WaveBonus } from '../game/scoring';
 import type { WaveSpec } from '../game/waves';
 import {
-  ICONS, openDialog, showPause, showResults, showStart, toast, sfx,
+  ICONS, openDialog, plural, showPause, showResults, showStart, toast, sfx,
   type DialogHandle, type OverlayPromise, type PauseChoice, type ResultsChoice, type StartResult,
 } from '../kit';
 import { iconSvg } from '../render/icons';
@@ -28,11 +28,17 @@ const DIFF_HINT: Record<Difficulty, string> = { easy: '5 srdíček', normal: '3 
 export type OverlayKind = 'start' | 'pause' | 'results';
 
 /** Pictogram how-to (start screen "Jak hrát" and the appbar "?"). */
+/** The 4 core pictograms – the first-visit how-to must fit on every screen with its button visible. */
+export const HOW_TO_CORE = [
+  { icon: '👆', text: 'Ťukni na komára – plesk!' },
+  { icon: '❗', text: 'Červený kruh? Plácni ho, než štípne!' },
+  { icon: '❤️', text: 'Štípnutí = o srdíčko méně.' },
+  { icon: '🔥', text: 'Rychle za sebou = kombo!' },
+];
+
+/** Full list for the appbar "?" help dialog. */
 export const HOW_TO = [
-  { icon: '👆', text: 'Klikni nebo ťukni na komára – plesk!' },
-  { icon: '❗', text: 'Červený kruh = chce štípnout. Plácni ho včas!' },
-  { icon: '❤️', text: 'Štípnutí bere srdíčko. Dohoň štípala a vrátí se.' },
-  { icon: '🔥', text: 'Rychle za sebou bez minutí = kombo ×2 až ×5.' },
+  ...HOW_TO_CORE,
   { icon: '🫧', text: 'Bublina po komárovi = vylepšení. Plácni na ni!' },
   { icon: '👑', text: 'Každá pátá vlna: královna komárů.' },
 ];
@@ -144,7 +150,7 @@ export class Screens {
     const bestLine = (m: Mode, d: Difficulty): string => {
       const b = save.bests[bestKey(m, d)];
       if (!b) return 'Bez rekordu';
-      if (m === 'zen') return `🏆 ${fmt(b.kills)} komárů`;
+      if (m === 'zen') return `🏆 ${fmt(b.kills)} ${plural(b.kills, 'komár', 'komáři', 'komárů')}`;
       if (m === 'waves') return `🏆 ${fmt(b.score)} · vlna ${b.wave}`;
       return `🏆 ${fmt(b.score)} bodů`;
     };
@@ -191,8 +197,8 @@ export class Screens {
       difficulty: diff,
       compact: true,
       showHowTo: !save.prefs.seenHelp,
-      howTo: HOW_TO,
-      keys: KEYS,
+      // Keyboard rows live only in the appbar help; 4 core steps keep "Rozumím" on screen.
+      howTo: HOW_TO_CORE,
       extra,
     });
     // Mode picker joins the hero (above the difficulty picker; left column on landscape phones),
@@ -261,9 +267,13 @@ export class Screens {
 
   // ------------------------------------------------------------------ pause
 
-  showPause(info: { mode: Mode; score: number; wave: number; kills: number; difficulty: Difficulty }, act: PauseActions): void {
-    const stats = [{ label: 'Skóre', value: info.score }];
+  showPause(info: { mode: Mode; score: number; wave: number; kills: number; difficulty: Difficulty; timeLeft: number }, act: PauseActions): void {
+    const stats: Array<{ label: string; value: number | string }> = [{ label: 'Skóre', value: info.score }];
     if (info.mode === 'waves') stats.push({ label: 'Vlna', value: info.wave });
+    if (info.mode === 'minute') {
+      const t = Math.max(0, Math.ceil(info.timeLeft));
+      stats.push({ label: 'Zbývá', value: `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}` });
+    }
     stats.push({ label: 'Zaplácnuto', value: info.kills });
     const extra = el(`<div class="k-more k-more--pause">
       <button type="button" class="g92-btn g92-btn--soft" data-help>${iconSvg('help', 20)}<span>Jak hrát</span></button>
@@ -320,10 +330,11 @@ export class Screens {
       title,
       subtitle: `${MODES[s.mode].name} · ${DIFFICULTIES[s.difficulty].name}`,
       score: s.mode === 'zen' ? s.kills : s.score,
-      scoreLabel: s.mode === 'zen' ? 'komárů' : 'bodů',
+      scoreLabel: s.mode === 'zen' ? plural(s.kills, 'komár', 'komáři', 'komárů') : plural(s.score, 'bod', 'body', 'bodů'),
       best: info.best > 0 ? info.best : null,
       isNewBest: info.isRecord,
-      stars: s.stars,
+      // Pohoda is the no-pressure mode: no grading with stars.
+      stars: s.mode === 'zen' ? undefined : s.stars,
       stats,
       lost: s.mode === 'waves' && s.stars === 0 && !info.isRecord,
       actions: [{ label: 'Úvod', value: 'start', variant: 'soft', icon: iconSvg('home', 20) }],
@@ -447,7 +458,7 @@ export class Screens {
         }).join('')}
         <label class="k-swatch k-swatch--custom" title="Vlastní barva"><input type="color" data-custom value="${p.color}" aria-label="Vlastní barva" /></label>
       </div>
-      <label class="g92-switch-row k-switch"><span>Krvavé fleky<small>Vypnuto = šedé šmouhy místo krve.</small></span><input type="checkbox" class="g92-toggle" role="switch" data-blood ${p.blood ? 'checked' : ''} /></label>
+      <label class="g92-switch-row k-switch"><span>Krvavé fleky (pro starší)<small>Vypnuto = pohádkové „pof!“ s hvězdičkami. V Pohodě se krev neukazuje nikdy.</small></span><input type="checkbox" class="g92-toggle" role="switch" data-blood ${p.gore ? 'checked' : ''} /></label>
       <label class="g92-switch-row k-switch"><span>Bzučení komárů<small>Čím blíž komár, tím hlasitěji bzučí.</small></span><input type="checkbox" class="g92-toggle" role="switch" data-buzz ${p.buzz ? 'checked' : ''} /></label>
     </div>`);
     const canvas = root.querySelector<HTMLCanvasElement>('[data-preview]');
@@ -491,7 +502,7 @@ export class Screens {
       change({ color: p.color });
       sync();
     });
-    root.querySelector<HTMLInputElement>('[data-blood]')!.addEventListener('change', (e) => change({ blood: (e.target as HTMLInputElement).checked }));
+    root.querySelector<HTMLInputElement>('[data-blood]')!.addEventListener('change', (e) => change({ gore: (e.target as HTMLInputElement).checked }));
     root.querySelector<HTMLInputElement>('[data-buzz]')!.addEventListener('change', (e) => change({ buzz: (e.target as HTMLInputElement).checked }));
     return root;
   }
@@ -511,7 +522,8 @@ export class Screens {
       return; // the kit countdown covers the start
     } else {
       boss = Boolean(spec?.boss);
-      const sub = boss ? 'Plácej královnu, dokud nepadne! Pozor na její komáry.' : `Zaplácni ${spec?.quota ?? 0} komárů`;
+      const q = spec?.quota ?? 0;
+      const sub = boss ? 'Plácej královnu, dokud nepadne! Pozor na její komáry.' : `Zaplácni ${q} ${plural(q, 'komára', 'komáry', 'komárů')}`;
       html = `<div class="banner__card"><div class="banner__kicker">${boss ? 'Pozor, královna!' : 'Připrav se'}</div><div class="banner__title">Vlna ${wave}</div><div class="banner__sub">${sub}</div><div data-new></div></div>`;
     }
     this.showBanner(html, boss, mode === 'waves' && spec && spec.newKinds.length > 0 ? 2800 : 2000);

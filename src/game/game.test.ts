@@ -147,6 +147,29 @@ describe('game flow', () => {
     expect(g.phase).toBe('over');
   });
 
+  it('minute clock waits for the countdown (holdIntro)', () => {
+    const g = newGame(15);
+    g.start('minute', 'normal');
+    g.holdIntro = true;
+    step(g, 4);
+    expect(g.phase).toBe('intro');
+    expect(g.timeLeft).toBe(60);
+    expect(g.mosquitoes.length).toBe(0);
+    g.holdIntro = false;
+    step(g, 0.05);
+    expect(g.phase).toBe('playing');
+  });
+
+  it('mosquitoes never enter through the HUD strip at the top', () => {
+    const rng = mulberry32(31);
+    for (let i = 0; i < 200; i++) {
+      for (const kind of ['common', 'fast', 'queen'] as const) {
+        const m = createMosquito(kind, RECT, rng, { speedMul: 1, patience: 99, diveDuration: 2 });
+        expect(m.y).toBeGreaterThanOrEqual(RECT.y);
+      }
+    }
+  });
+
   it('minute mode ends when the time is up', () => {
     const g = newGame(10);
     g.start('minute', 'normal');

@@ -145,6 +145,8 @@ export class Game {
   timeLeft = MINUTE_LENGTH;
   lastTickSecond = -1;
   cooldown = 0;
+  /** Keep the intro phase running (e.g. while a 3-2-1 countdown is shown) – the clock doesn't start. */
+  holdIntro = false;
   stats = this.freshStats();
 
   constructor(rng: Rng = Math.random) {
@@ -238,6 +240,7 @@ export class Game {
     this.lastTickSecond = -1;
     this.spawnAcc = 0;
     this.cooldown = 0;
+    this.holdIntro = false;
     this.stats = this.freshStats();
     this.waveSpecCur = null;
     if (mode === 'waves') {
@@ -583,7 +586,7 @@ export class Game {
     }
 
     // Phase machine.
-    if (this.phase === 'intro' && this.phaseT >= this.introLength()) {
+    if (this.phase === 'intro' && !this.holdIntro && this.phaseT >= this.introLength()) {
       this.phase = 'playing';
       this.phaseT = 0;
       if (this.mode === 'waves' && this.waveSpecCur?.boss) {

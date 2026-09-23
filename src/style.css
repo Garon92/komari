@@ -241,26 +241,6 @@ body {
   }
 }
 
-.hud__pause {
-  pointer-events: auto;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--g92-radius-pill);
-  border: 1px solid var(--g92-border);
-  background: var(--g92-surface-glass);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  box-shadow: var(--g92-shadow-2);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  color: var(--g92-text);
-}
-
-.hud__pause:hover {
-  background: var(--g92-surface);
-}
-
 .hud__powers {
   position: absolute;
   left: 50%;
@@ -425,9 +405,21 @@ body {
 
 .k-modes {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--g92-space-2);
   width: 100%;
+  min-width: 0;
+}
+
+.k-mode {
+  min-width: 0;
+}
+
+.g92-overlay__extra,
+.k-start,
+.k-section {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .k-mode {
@@ -984,11 +976,6 @@ body {
     height: 18px;
   }
 
-  .hud__pause {
-    width: 42px;
-    height: 42px;
-  }
-
   .hud__combo {
     font-size: var(--g92-fs-sm);
     min-height: 32px;
@@ -1005,28 +992,60 @@ body {
     display: none;
   }
 
+  .k-modes {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  /* First-visit how-to: 4 pictograms in one row so "Rozumím" stays on screen. */
+  .k-overlay-start .g92-howto {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .k-overlay-start .g92-howto__text {
+    font-size: var(--g92-fs-sm);
+    line-height: 1.2;
+  }
+
   .k-mode {
+    min-width: 0;
     min-height: 0;
-    padding: 6px 8px;
+    padding: 6px 4px;
+    align-items: center;
+    text-align: center;
   }
 
   .k-mode small {
     display: none;
   }
 
-  .k-mode {
-    align-items: center;
-    text-align: center;
+  .k-mode b {
+    font-size: var(--g92-fs-sm);
+  }
+
+  .k-mode b,
+  .k-mode__best {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .k-mode__best {
+    font-size: 0.66rem;
   }
 
   .k-more .g92-btn {
     min-height: 44px;
-    flex-direction: row;
-    font-size: var(--g92-fs-xs);
+    flex-direction: column;
+    gap: 0;
+    padding: 4px 2px;
+    font-size: 0.7rem;
   }
 
   .k-more .g92-btn svg {
-    display: none;
+    width: 18px;
+    height: 18px;
   }
 
   .banner {
@@ -1039,6 +1058,29 @@ body {
 
   .banner__new {
     display: none;
+  }
+}
+
+/* Results: long titles ("Komáři vyhráli… zatím!") shouldn't take two huge lines. */
+.k-overlay-results .g92-overlay__title {
+  font-size: clamp(1.75rem, 1.1rem + 2vw, 2.6rem);
+}
+
+/* Tablets / laptops in landscape (≤ 900 px tall): results side by side too, so nothing needs scrolling. */
+@media (orientation: landscape) and (min-width: 900px) and (max-height: 900px) {
+  .k-overlay-results .g92-overlay__panel {
+    width: min(100%, 58rem);
+  }
+
+  .k-overlay-results .g92-overlay__panel:has(> .g92-overlay__hero) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    align-items: center;
+    column-gap: var(--g92-space-8);
+  }
+
+  .k-overlay-results .g92-overlay__hero,
+  .k-overlay-results .g92-overlay__controls {
+    gap: var(--g92-space-3);
   }
 }
 

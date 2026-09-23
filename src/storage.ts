@@ -16,7 +16,11 @@ export interface BestEntry {
 export interface Prefs {
   shape: SwatterShape;
   color: string;
-  blood: boolean;
+  /**
+   * Realistic blood splats – opt-in for older players (default off = cartoon puffs and stars).
+   * Replaces the early `blood` flag, which defaulted to true and is deliberately ignored.
+   */
+  gore: boolean;
   buzz: boolean;
   mode: Mode;
   difficulty: Difficulty;
@@ -47,7 +51,7 @@ export function defaultSave(): SaveData {
     bests: {},
     stats: { totalKills: 0, games: 0, bestCombo: 0, kindKills: {}, powers: [], playSeconds: 0 },
     achievements: {},
-    prefs: { shape: 'round', color: '#60a5fa', blood: true, buzz: true, mode: 'waves', difficulty: 'normal', seenHelp: false },
+    prefs: { shape: 'round', color: '#60a5fa', gore: false, buzz: true, mode: 'waves', difficulty: 'normal', seenHelp: false },
   };
 }
 
@@ -60,6 +64,10 @@ export function normalize(raw: unknown): SaveData {
   if (r.stats && typeof r.stats === 'object') d.stats = { ...d.stats, ...r.stats };
   if (r.achievements && typeof r.achievements === 'object') d.achievements = r.achievements;
   if (r.prefs && typeof r.prefs === 'object') d.prefs = { ...d.prefs, ...r.prefs };
+  // Old saves carried `blood: true` only because it was the default – never carry it over.
+  delete (d.prefs as Partial<Prefs> & { blood?: unknown }).blood;
+  if (typeof d.prefs.gore !== 'boolean') d.prefs.gore = false;
+  if (typeof d.prefs.buzz !== 'boolean') d.prefs.buzz = true;
   if (!['round', 'square', 'heart', 'star'].includes(d.prefs.shape)) d.prefs.shape = 'round';
   if (!['waves', 'minute', 'zen'].includes(d.prefs.mode)) d.prefs.mode = 'waves';
   if (!['easy', 'normal', 'hard'].includes(d.prefs.difficulty)) d.prefs.difficulty = 'normal';

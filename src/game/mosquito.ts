@@ -125,13 +125,17 @@ export function createMosquito(kind: MosquitoKind, rect: Rect, rng: Rng, opt: Sp
   }
 
   // Pick a spot on a random edge, slightly outside the rect.
-  const edge = Math.floor(rng() * 4);
+  // Left, right or bottom edge – never through the HUD strip at the top.
+  const edge = Math.floor(rng() * 3);
   const out = 30 + r * 2;
-  if (edge === 0) { m.x = rect.x - out; m.y = between(rng, rect.y, rect.y + rect.h); }
-  else if (edge === 1) { m.x = rect.x + rect.w + out; m.y = between(rng, rect.y, rect.y + rect.h); }
-  else if (edge === 2) { m.x = between(rng, rect.x, rect.x + rect.w); m.y = rect.y - out; }
+  const top = rect.y + r * 2;
+  if (edge === 0) { m.x = rect.x - out; m.y = between(rng, top, rect.y + rect.h); }
+  else if (edge === 1) { m.x = rect.x + rect.w + out; m.y = between(rng, top, rect.y + rect.h); }
   else { m.x = between(rng, rect.x, rect.x + rect.w); m.y = rect.y + rect.h + out; }
-  if (kind === 'queen') { m.x = rect.x + rect.w / 2; m.y = rect.y - out; }
+  if (kind === 'queen') {
+    m.x = rng() < 0.5 ? rect.x - out : rect.x + rect.w + out;
+    m.y = rect.y + rect.h * 0.3;
+  }
   const tx = between(rng, rect.x + rect.w * 0.2, rect.x + rect.w * 0.8);
   const ty = between(rng, rect.y + rect.h * 0.2, rect.y + rect.h * (kind === 'queen' ? 0.5 : 0.8));
   m.heading = Math.atan2(ty - m.y, tx - m.x);
@@ -172,14 +176,13 @@ export interface WorldForces {
 
 /** Nearest exit point heading for a leaving mosquito. */
 function exitHeading(m: Mosquito, rect: Rect): number {
+  // Leave sideways or downwards (not through the HUD at the top).
   const dl = m.x - rect.x;
   const dr = rect.x + rect.w - m.x;
-  const dtp = m.y - rect.y;
   const db = rect.y + rect.h - m.y;
-  const min = Math.min(dl, dr, dtp, db);
+  const min = Math.min(dl, dr, db);
   if (min === dl) return Math.PI;
   if (min === dr) return 0;
-  if (min === dtp) return -Math.PI / 2;
   return Math.PI / 2;
 }
 

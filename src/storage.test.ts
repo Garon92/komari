@@ -14,6 +14,14 @@ describe('save data', () => {
     expect(n.prefs.difficulty).toBe('hard');
   });
 
+  it('blood is opt-in: old auto-default `blood: true` is not carried over', () => {
+    expect(defaultSave().prefs.gore).toBe(false);
+    const n = normalize({ prefs: { blood: true } });
+    expect(n.prefs.gore).toBe(false);
+    expect('blood' in n.prefs).toBe(false);
+    expect(normalize({ prefs: { gore: true } }).prefs.gore).toBe(true);
+  });
+
   it('migrates the original game keys', () => {
     const d = migrateLegacy(defaultSave(), '57', JSON.stringify({ type: 'square', color: '#ff0000' }));
     expect(d.bests['zen:normal']?.kills).toBe(57);

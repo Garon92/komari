@@ -19,7 +19,8 @@ export class Hud {
   private comboLeft = -1;
   private last = { score: -1, mul: -1, combo: -1, wave: '', pct: -1, time: -1, lives: -1, maxLives: -1, powers: '' };
 
-  constructor(root: HTMLElement, onPause: () => void) {
+  /** The pause button lives in the appbar (`slot="actions"`), outside the playfield. */
+  constructor(root: HTMLElement) {
     this.root = root;
     root.innerHTML = `
       <div class="hud__row">
@@ -36,7 +37,6 @@ export class Hud {
         </div>
         <div class="hud__right">
           <div class="chip hud__lives" data-lives aria-label="Životy"></div>
-          <button class="hud__pause" type="button" data-pause aria-label="Pauza (Esc)">${iconSvg('pause', 22)}</button>
         </div>
       </div>
       <div class="hud__powers" data-powers></div>`;
@@ -50,12 +50,6 @@ export class Hud {
     this.timerEl = q('[data-timer]');
     this.livesEl = q('[data-lives]');
     this.powersEl = q('[data-powers]');
-    q('[data-pause]').addEventListener('click', (e) => {
-      e.stopPropagation();
-      onPause();
-    });
-    // The pause button must not trigger a swat underneath.
-    q('[data-pause]').addEventListener('pointerdown', (e) => e.stopPropagation());
   }
 
   show(on: boolean): void {

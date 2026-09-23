@@ -304,12 +304,15 @@ export class SpriteCache {
   private map = new Map<string, Sprite>();
   private res = 2;
 
-  setResolution(dpr: number): void {
+  /** Returns true when the cache was reset (sprites need re-rendering). */
+  setResolution(dpr: number): boolean {
     const res = Math.min(5, Math.max(2, dpr * 2.2));
-    if (Math.abs(res - this.res) > 0.01) {
+    if (Math.abs(res - this.res) > 0.01 || this.map.size === 0) {
       this.res = res;
       this.map.clear();
+      return true;
     }
+    return false;
   }
 
   get(kind: MosquitoKind, variant: 'normal' | 'fed' | 'flash'): Sprite {

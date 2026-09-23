@@ -8,7 +8,29 @@ export interface SplatColor {
 }
 
 export const BLOOD: SplatColor = { base: '110,7,12', dark: '90,6,10' };
-export const GOO: SplatColor = { base: '70,78,58', dark: '52,58,44' };
+
+/** Cartoon star colours for the kid-friendly (default) splat. */
+export const PASTEL = ['#fde047', '#f9a8d4', '#93c5fd', '#86efac', '#fdba74'];
+
+/** Kid-friendly "splat": a soft dusty puff mark on the wall (no blood). */
+export function paintPuff(g: CanvasRenderingContext2D, x: number, y: number, R: number): void {
+  g.save();
+  for (let i = 0; i < 5; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = R * 0.35 * Math.random();
+    const px = x + Math.cos(a) * d;
+    const py = y + Math.sin(a) * d;
+    const rr = R * rand(0.45, 0.75);
+    const gr = g.createRadialGradient(px, py, 0, px, py, rr);
+    gr.addColorStop(0, 'rgba(120,112,150,0.16)');
+    gr.addColorStop(1, 'rgba(120,112,150,0)');
+    g.fillStyle = gr;
+    g.beginPath();
+    g.arc(px, py, rr, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.restore();
+}
 
 /** Paints a splat blot (ported from the original Splat class) into the stain layer. */
 export function paintSplat(g: CanvasRenderingContext2D, x: number, y: number, R: number, orient: number, strength: number, col: SplatColor): void {
@@ -89,7 +111,8 @@ export type Particle =
   | { kind: 'text'; x: number; y: number; vy: number; age: number; life: number; text: string; color: string; size: number }
   | { kind: 'ring'; x: number; y: number; r0: number; r1: number; age: number; life: number; color: string; width: number }
   | { kind: 'bolt'; pts: Array<[number, number]>; age: number; life: number; color: string }
-  | { kind: 'flake'; x: number; y: number; vx: number; vy: number; age: number; life: number; size: number };
+  | { kind: 'flake'; x: number; y: number; vx: number; vy: number; age: number; life: number; size: number }
+  | { kind: 'burst'; x: number; y: number; r: number; rot: number; age: number; life: number };
 
 export class Effects {
   particles: Particle[] = [];
@@ -130,12 +153,18 @@ export class Effects {
     }
   }
 
-  stars(x: number, y: number, count: number, color: string): void {
+  stars(x: number, y: number, count: number, color: string | readonly string[]): void {
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
       const v = rand(40, 160);
-      this.particles.push({ kind: 'star', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, age: 0, life: rand(0.5, 1), color, size: rand(3, 7) });
+      const c = typeof color === 'string' ? color : color[Math.floor(Math.random() * color.length)] ?? '#fde047';
+      this.particles.push({ kind: 'star', x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, age: 0, life: rand(0.5, 1), color: c, size: rand(3, 7) });
     }
+  }
+
+  /** Cartoon "pof!" star burst (kid-friendly kill effect). */
+  burst(x: number, y: number, r: number): void {
+    this.particles.push({ kind: 'burst', x, y, r, rot: Math.random() * Math.PI, age: 0, life: 0.32 });
   }
 
   flakes(w: number, h: number, count: number): void {
@@ -217,11 +246,34 @@ export class Effects {
     this.particles = this.particles.filter((p) => p.age < p.life);
   }
 
-  draw(g: CanvasRenderingContext2D, font: string): void {
+  draw(g: CanvasRenderingContext2D, font: string, viewW = 0): void {
     for (const p of this.particles) {
       const t = p.age / p.life;
       const a = 1 - t;
       switch (p.kind) {
+        case 'burst': {
+          const k = 0.45 + 0.75 * (1 - (1 - t) * (1 - t));
+          g.save();
+          g.globalAlpha = a;
+          g.translate(p.x, p.y);
+          g.rotate(p.rot);
+          g.beginPath();
+          for (let i = 0; i < 16; i++) {
+            const rr = (i % 2 === 0 ? p.r : p.r * 0.5) * k;
+            const an = (i * Math.PI) / 8;
+            if (i === 0) g.moveTo(Math.cos(an) * rr, Math.sin(an) * rr);
+            else g.lineTo(Math.cos(an) * rr, Math.sin(an) * rr);
+          }
+          g.closePath();
+          g.fillStyle = 'rgba(255,251,235,0.95)';
+          g.fill();
+          g.lineWidth = 3;
+          g.lineJoin = 'round';
+          g.strokeStyle = 'rgba(251,191,36,0.95)';
+          g.stroke();
+          g.restore();
+          break;
+        }
         case 'bit':
           g.save();
           g.globalAlpha = a;
@@ -282,9 +334,16 @@ export class Effects {
           g.save();
           const pop = t < 0.15 ? 0.6 + (t / 0.15) * 0.5 : 1.1 - Math.min(0.1, (t - 0.15));
           g.globalAlpha = t > 0.6 ? (1 - t) / 0.4 : 1;
-          g.translate(p.x, p.y);
-          g.scale(pop, pop);
           g.font = `900 ${p.size}px ${font}`;
+          // Keep the whole label inside the playfield (e.g. a bite at the very left edge).
+          let x = p.x;
+          if (viewW > 0) {
+            const half = (g.measureText(p.text).width * 1.1) / 2 + 6;
+            x = Math.min(Math.max(x, half), Math.max(half, viewW - half));
+          }
+          const y = Math.max(p.y, p.size);
+          g.translate(x, y);
+          g.scale(pop, pop);
           g.textAlign = 'center';
           g.textBaseline = 'middle';
           g.lineJoin = 'round';

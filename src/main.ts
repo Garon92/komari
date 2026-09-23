@@ -5,7 +5,7 @@ import { Audio } from './audio/audio';
 import { DIFFICULTIES, MODES, type Difficulty, type Mode, type SceneId } from './game/config';
 import { Game, type GameEvent, type Summary } from './game/game';
 import {
-  autoPause, countdown, haptic, openSettingsDialog, prefersReducedMotion, recordActivity, resolvedTheme, setHelp, settings,
+  autoPause, countdown, haptic, openSettingsDialog, prefersReducedMotion, recordActivity, resolvedTheme, setHelp, settings, UI_ICONS,
 } from './kit';
 import { Renderer, type PointerState } from './render/renderer';
 import { bestKey, loadSave, writeSave, type Prefs, type SaveData } from './storage';
@@ -25,20 +25,39 @@ const game = new Game();
 const renderer = new Renderer(canvas);
 const audio = new Audio();
 const screens = new Screens($('banner'));
-const hud = new Hud($('hud'), () => pause());
+const hud = new Hud($('hud'));
+
+// Pause lives in the appbar actions slot (48 px, outside the playfield – taps meant for mosquitoes never hit it).
+const pauseBtn = document.createElement('button');
+pauseBtn.type = 'button';
+pauseBtn.slot = 'actions';
+pauseBtn.className = 'g92-btn g92-btn--ghost g92-btn--icon';
+pauseBtn.setAttribute('aria-label', 'Pauza (Esc)');
+pauseBtn.title = 'Pauza';
+pauseBtn.innerHTML = UI_ICONS.pause;
+pauseBtn.hidden = true;
+pauseBtn.addEventListener('click', () => pause());
+appbar?.append(pauseBtn);
+function syncPauseBtn(): void {
+  const show = game.isActive && !paused && game.phase !== 'dying';
+  if (pauseBtn.hidden === show) pauseBtn.hidden = !show;
+}
 
 const pointer: PointerState = { x: -100, y: -100, visible: false, touch: false };
 const keysHeld = new Set<string>();
 let paused = false;
 let gameAchievements: string[] = [];
 let resultsTimer = 0;
+/** Invalidates pending async starts (countdown) when a new game begins. */
+let playToken = 0;
 let lastSummary: { s: Summary; info: ResultInfo } | null = null;
 
 function applyPrefs(): void {
   renderer.prefs = {
     shape: save.prefs.shape,
     color: save.prefs.color,
-    blood: save.prefs.blood,
+    // Realistic blood only when opted in, and never in Pohoda (the little kids' mode) or the attract screen.
+    blood: save.prefs.gore && game.mode !== 'zen' && game.phase !== 'menu',
     reducedMotion: prefersReducedMotion(),
   };
   audio.setBuzzEnabled(save.prefs.buzz);
@@ -143,6 +162,7 @@ function toStart(): void {
   paused = false;
   lastSummary = null;
   game.startMenu(menuScene());
+  applyPrefs();
   renderer.setScene(game.scene, true);
   hud.show(false);
   screens.hideBanner();
@@ -193,20 +213,31 @@ function play(mode: Mode, difficulty: Difficulty): void {
   stage.classList.add('is-playing');
   renderer.clearStains();
   game.start(mode, difficulty);
+  applyPrefs();
   renderer.setScene(game.scene, false);
   layout();
   startLoop();
-  if (mode === 'minute') void countdown({ container: stage });
+  if (mode === 'minute') {
+    // The 60 s clock starts only after "Start!" of the 3-2-1 countdown.
+    game.holdIntro = true;
+    const token = ++playToken;
+    void countdown({ container: stage }).then(() => {
+      if (token === playToken) game.holdIntro = false;
+    });
+  } else {
+    playToken++;
+  }
 }
 
 function pause(): void {
   if (!game.isActive || paused) return;
   paused = true;
+  syncPauseBtn();
   keysHeld.clear();
   audio.setBuzzActive(false);
   screens.hideBanner();
   screens.showPause(
-    { mode: game.mode, score: game.score, wave: game.wave, kills: game.kills, difficulty: game.difficulty },
+    { mode: game.mode, score: game.score, wave: game.wave, kills: game.kills, difficulty: game.difficulty, timeLeft: game.timeLeft },
     {
       resume: () => resume(),
       restart: () => play(game.mode, game.difficulty),
@@ -256,7 +287,7 @@ function onGameOver(s: Summary): void {
   gameAchievements.push(...life);
   writeSave(save);
   reportActivity(s);
-  for (const id of life) screens.toastAchievement(id);
+  // Achievements earned at the very end are listed on the results card – no toast over its buttons.
   lastSummary = { s, info: { best: Math.max(prevValue, value), isRecord, newAchievements: [...gameAchievements], rankUp } };
   resultsTimer = window.setTimeout(() => {
     stage.classList.remove('is-playing');
@@ -424,6 +455,7 @@ function frame(t: number): void {
     processEvents();
   }
   renderer.render(game, pointer, paused ? 0 : dt);
+  syncPauseBtn();
   if (hudVisible()) hud.update(game);
   const buzzing = !paused && (game.phase === 'playing' || game.phase === 'intro' || game.phase === 'clear' || game.phase === 'dying');
   audio.setBuzzActive(buzzing);

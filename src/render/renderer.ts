@@ -1,7 +1,7 @@
 import { KINDS, POWERS, SCENES, type MosquitoKind, type PowerKind, type SceneId } from '../game/config';
 import type { Game, GameEvent } from '../game/game';
 import type { Mosquito } from '../game/mosquito';
-import { BLOOD, Effects, GOO, paintSplat } from './effects';
+import { BLOOD, Effects, paintPuff, paintSplat, PASTEL } from './effects';
 import { drawPowerIcon } from './icons';
 import { drawWings, SpriteCache } from './mosquitoArt';
 import { drawAmbient, layoutFor, paintScene, sceneLights, type Firefly, type Layout, type Light } from './scenes';
@@ -52,7 +52,7 @@ export class Renderer {
   private touchLight: { x: number; y: number; t: number } | null = null;
   private lightning = 0;
   private time = 0;
-  prefs: RenderPrefs = { shape: 'round', color: '#60a5fa', blood: true, reducedMotion: false };
+  prefs: RenderPrefs = { shape: 'round', color: '#60a5fa', blood: false, reducedMotion: false };
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -72,7 +72,7 @@ export class Renderer {
     this.dpr = d;
     this.canvas.width = Math.max(1, Math.round(w * d));
     this.canvas.height = Math.max(1, Math.round(h * d));
-    this.sprites.setResolution(d);
+    if (this.sprites.setResolution(d)) this.warmup();
     // Stains are screen-space; keep what we can.
     const old = this.stains;
     this.stains = document.createElement('canvas');
@@ -109,6 +109,26 @@ export class Renderer {
     paintScene(bg, id, this.layout);
   }
 
+  /**
+   * Pre-renders every mosquito sprite in idle time (one per callback), so the first appearance of a
+   * new kind mid-wave never costs a frame.
+   */
+  warmup(): void {
+    const jobs: Array<() => void> = [];
+    for (const kind of Object.keys(KINDS) as MosquitoKind[]) {
+      for (const v of ['normal', 'flash', 'fed'] as const) jobs.push(() => void this.sprites.get(kind, v));
+    }
+    const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+    const idle = (cb: () => void) => (ric ? ric.call(window, cb, { timeout: 500 }) : setTimeout(cb, 16));
+    const next = () => {
+      const job = jobs.shift();
+      if (!job) return;
+      job();
+      idle(next);
+    };
+    idle(next);
+  }
+
   clearStains(): void {
     this.stainG.save();
     this.stainG.setTransform(1, 0, 0, 1, 0, 0);
@@ -124,9 +144,6 @@ export class Renderer {
     this.shakeT = Math.max(this.shakeT, t);
   }
 
-  private splatColor() {
-    return this.prefs.blood ? BLOOD : GOO;
-  }
 
   /** Reacts to game events with visual effects. */
   onEvent(e: GameEvent, pointer: PointerState): void {
@@ -148,11 +165,18 @@ export class Renderer {
           this.stainG.arc(e.x, e.y, e.r * 0.8, 0, Math.PI * 2);
           this.stainG.fill();
           this.fx.sparks(e.x, e.y, 14, '#c4b5fd', 220);
-        } else {
-          paintSplat(this.stainG, e.x, e.y, R, e.heading + Math.PI, strength, this.splatColor());
+        } else if (this.prefs.blood) {
+          // Opt-in realistic mode (older players): blood splat, drips, the squashed mosquito.
+          paintSplat(this.stainG, e.x, e.y, R, e.heading + Math.PI, strength, BLOOD);
           this.paintCarcass(e.kind, e.x, e.y, e.r, e.heading);
           this.fx.addDrips(e.x, e.y, R, strength, Math.round((1 + Math.random() * 2) * big));
           this.fx.bits(e.x, e.y, 5 + Math.round(big * 2), 'rgba(40,45,55,0.8)', 160 * Math.sqrt(big));
+        } else {
+          // Default, kid-friendly: a cartoon "pof!" – dust puff, star burst and pastel stars.
+          paintPuff(this.stainG, e.x, e.y, R * 0.75);
+          this.fx.burst(e.x, e.y, e.r * (2.2 + big * 0.6));
+          this.fx.stars(e.x, e.y, 6 + Math.round(big * 3), PASTEL);
+          this.fx.bits(e.x, e.y, 3, 'rgba(200,215,235,0.9)', 120);
         }
         if (e.kind === 'golden') this.fx.stars(e.x, e.y, 18, '#fde047');
         if (e.source === 'spray') this.fx.stars(e.x, e.y, 5, '#e9d5ff');
@@ -161,14 +185,18 @@ export class Renderer {
           this.fx.text(e.x, e.y - 14, `+${e.points}`, col, 18 + Math.min(12, e.multiplier * 2));
         }
         if (e.lastSecond) this.fx.text(e.x, e.y - 44, 'Na poslední chvíli!', '#4ade80', 18, 1.2);
-        if (e.revenge) this.fx.text(e.x, e.y - 44, 'Krev zpět! ❤', '#f87171', 22, 1.3);
+        if (e.revenge) this.fx.text(e.x, e.y - 44, 'Srdíčko zpět! ❤', '#f87171', 22, 1.3);
         if (e.kind === 'queen') this.shake(12, 0.5);
         else if (big > 1) this.shake(4, 0.12);
         break;
       }
       case 'hurt':
-        paintSplat(this.stainG, e.x, e.y, e.r * 1.2, Math.random() * 6, 0.2, this.splatColor());
-        this.fx.bits(e.x, e.y, 4, 'rgba(40,45,55,0.8)');
+        if (this.prefs.blood) {
+          paintSplat(this.stainG, e.x, e.y, e.r * 1.2, Math.random() * 6, 0.2, BLOOD);
+          this.fx.bits(e.x, e.y, 4, 'rgba(40,45,55,0.8)');
+        } else {
+          this.fx.stars(e.x, e.y, 4, PASTEL);
+        }
         this.fx.ring(e.x, e.y, e.r, e.r * 2, 'rgba(255,255,255,0.8)', 0.2, 3);
         this.shake(3, 0.1);
         break;
@@ -269,7 +297,7 @@ export class Renderer {
     }
     for (const s of this.swatAnims) s.t += dt;
     this.swatAnims = this.swatAnims.filter((s) => s.t < 0.35);
-    this.fx.update(dt, this.stainG, this.splatColor());
+    this.fx.update(dt, this.stainG, BLOOD);
 
     // Stains slowly soak away.
     this.stainFade += dt;
@@ -339,7 +367,7 @@ export class Renderer {
     this.drawWelts(game);
     this.drawIdleHint(game);
 
-    this.fx.draw(g, FONT);
+    this.fx.draw(g, FONT, this.w);
 
     // Swatter cursor or tap animation.
     const look = { shape: this.prefs.shape, color: this.prefs.color, electric: game.powers.electric > 0, big: game.powers.big > 0 };
