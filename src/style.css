@@ -919,6 +919,47 @@ body {
   }
 }
 
+/* Narrow phones: keep the whole HUD row on screen (score | wave | hearts + pause). */
+@media (max-width: 420px) {
+  .hud {
+    padding-inline: max(6px, env(safe-area-inset-left)) max(6px, env(safe-area-inset-right));
+  }
+
+  .hud__row {
+    gap: 6px;
+  }
+
+  .hud__right {
+    gap: 6px;
+  }
+
+  .hud__wave {
+    min-width: 0;
+    padding: 5px 10px;
+  }
+
+  .hud__lives {
+    padding: 4px 8px;
+    gap: 0;
+  }
+
+  .heart {
+    width: 18px;
+    height: 18px;
+  }
+
+  .hud__pause {
+    width: 42px;
+    height: 42px;
+  }
+
+  .hud__combo {
+    font-size: var(--g92-fs-sm);
+    min-height: 32px;
+    padding: 4px 10px;
+  }
+}
+
 /* Landscape phones (the kit lays overlays out side by side; trim our extras). */
 @media (max-height: 520px) and (orientation: landscape) {
   .k-overlay-start .k-foot,
