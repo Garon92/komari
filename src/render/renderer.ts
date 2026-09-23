@@ -1,4 +1,4 @@
-import { KINDS, POWERS, SCENES, type PowerKind, type SceneId } from '../game/config';
+import { KINDS, POWERS, SCENES, type MosquitoKind, type PowerKind, type SceneId } from '../game/config';
 import type { Game, GameEvent } from '../game/game';
 import type { Mosquito } from '../game/mosquito';
 import { BLOOD, Effects, GOO, paintSplat } from './effects';
@@ -150,6 +150,7 @@ export class Renderer {
           this.fx.sparks(e.x, e.y, 14, '#c4b5fd', 220);
         } else {
           paintSplat(this.stainG, e.x, e.y, R, e.heading + Math.PI, strength, this.splatColor());
+          this.paintCarcass(e.kind, e.x, e.y, e.r, e.heading);
           this.fx.addDrips(e.x, e.y, R, strength, Math.round((1 + Math.random() * 2) * big));
           this.fx.bits(e.x, e.y, 5 + Math.round(big * 2), 'rgba(40,45,55,0.8)', 160 * Math.sqrt(big));
         }
@@ -216,6 +217,29 @@ export class Renderer {
       default:
         break;
     }
+  }
+
+  /** The squashed mosquito stays stuck in its splat (fades with the stain layer). */
+  private paintCarcass(kind: MosquitoKind, x: number, y: number, r: number, heading: number): void {
+    const sprite = this.sprites.get(kind, 'normal');
+    const k = r / sprite.R;
+    const g = this.stainG;
+    g.save();
+    g.translate(x, y);
+    g.rotate(heading + (Math.random() - 0.5) * 0.8);
+    g.scale(k * 1.12, k * 0.6);
+    g.globalAlpha = 0.8;
+    g.drawImage(sprite.canvas, -sprite.half, -sprite.half, sprite.half * 2, sprite.half * 2);
+    // A torn-off wing lying next to it.
+    g.globalAlpha = 0.45;
+    g.fillStyle = 'rgba(200,215,230,0.9)';
+    g.strokeStyle = 'rgba(60,80,110,0.6)';
+    g.lineWidth = 1 / Math.max(0.3, k);
+    g.beginPath();
+    g.ellipse(-sprite.R * 0.2, sprite.R * 1.3, sprite.R * 1.1, sprite.R * 0.35, 0.5, 0, Math.PI * 2);
+    g.fill();
+    g.stroke();
+    g.restore();
   }
 
   private lights(game: Game, pointer: PointerState): Light[] {
