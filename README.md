@@ -22,7 +22,7 @@ Arkádová hra s plácačkou pro děti i dospělé. Součást rodiny aplikací n
 | **Minutovka** | 60 vteřin, co nejvíc bodů. Štípnutí bere 3 vteřiny. |
 | **Pohoda** | Pro nejmenší: nikdo neštípe, žádný spěch. |
 
-Obtížnost: **Snadná** (5 srdíček, větší plácačka, minutí nekazí kombo), **Normální**, **Těžká**.
+Obtížnost: **Lehká** 🐢 (5 srdíček, větší plácačka, minutí nekazí kombo), **Normální** 🐇, **Těžká** 🔥.
 
 ### Komáři
 

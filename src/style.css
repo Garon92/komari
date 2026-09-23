@@ -1061,6 +1061,13 @@ body {
   }
 }
 
+/* Game overlays: vertical scroll yes, page pinch-zoom no (C-27). */
+.g92-overlay--start,
+.g92-overlay--pause,
+.g92-overlay--results {
+  touch-action: pan-y;
+}
+
 /* Results: long titles ("Komáři vyhráli… zatím!") shouldn't take two huge lines. */
 .k-overlay-results .g92-overlay__title {
   font-size: clamp(1.75rem, 1.1rem + 2vw, 2.6rem);

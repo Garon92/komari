@@ -83,7 +83,7 @@ export interface DifficultyDef {
 
 export const DIFFICULTIES: Record<Difficulty, DifficultyDef> = {
   easy: {
-    name: 'Snadná', lives: 5, speedMul: 0.72, patience: 13, dive: 2.8, spawnMul: 0.8, quotaMul: 0.8,
+    name: 'Lehká', lives: 5, speedMul: 0.72, patience: 13, dive: 2.8, spawnMul: 0.8, quotaMul: 0.8,
     swatRadius: 60, missBreaksCombo: false, comboWindow: 3, bossHpMul: 0.6, ninjaMinAlpha: 0.32, scoreMul: 1,
   },
   normal: {

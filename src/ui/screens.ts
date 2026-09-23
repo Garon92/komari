@@ -22,7 +22,8 @@ const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;',
 const fmt = (n: number): string => n.toLocaleString('cs-CZ');
 
 const MODE_ICON: Record<Mode, string> = { waves: '🌊', minute: '⏱️', zen: '🌼' };
-const DIFF_ICON: Record<Difficulty, string> = { easy: '🐢', normal: '🦟', hard: '🔥' };
+// Family-wide difficulty look (C-12): Lehká 🐢 / Normální 🐇 / Těžká 🔥.
+const DIFF_ICON: Record<Difficulty, string> = { easy: '🐢', normal: '🐇', hard: '🔥' };
 const DIFF_HINT: Record<Difficulty, string> = { easy: '5 srdíček', normal: '3 srdíčka', hard: 'rychlí komáři' };
 
 export type OverlayKind = 'start' | 'pause' | 'results';
@@ -285,7 +286,7 @@ export class Screens {
       subtitle: `${MODES[info.mode].name} · ${DIFFICULTIES[info.difficulty].name}`,
       stats,
       menuHref: null,
-      menuLabel: info.mode === 'zen' ? 'Dokončit' : 'Ukončit hru',
+      menuLabel: 'Ukončit hru',
       className: 'k-overlay-pause',
     });
     // Secondary buttons below the main actions (kit `extra` would put them above "Pokračovat").
@@ -337,7 +338,8 @@ export class Screens {
       stars: s.mode === 'zen' ? undefined : s.stars,
       stats,
       lost: s.mode === 'waves' && s.stars === 0 && !info.isRecord,
-      actions: [{ label: 'Úvod', value: 'start', variant: 'soft', icon: iconSvg('home', 20) }],
+      // C-07 wording: in-app home = "Domů" 🏠, leaving the app = "Menu".
+      actions: [{ label: 'Domů', value: 'start', variant: 'soft', icon: iconSvg('home', 20) }],
       extra,
       className: 'k-overlay-results',
     });
