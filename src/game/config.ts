@@ -87,11 +87,11 @@ export const DIFFICULTIES: Record<Difficulty, DifficultyDef> = {
     swatRadius: 60, missBreaksCombo: false, comboWindow: 3, bossHpMul: 0.6, ninjaMinAlpha: 0.32, scoreMul: 1,
   },
   normal: {
-    name: 'Normální', lives: 3, speedMul: 1, patience: 9.5, dive: 2.1, spawnMul: 1, quotaMul: 1,
+    name: 'Normální', lives: 3, speedMul: 1, patience: 8.5, dive: 2.1, spawnMul: 1, quotaMul: 1,
     swatRadius: 48, missBreaksCombo: true, comboWindow: 2.2, bossHpMul: 1, ninjaMinAlpha: 0.14, scoreMul: 1.5,
   },
   hard: {
-    name: 'Těžká', lives: 3, speedMul: 1.25, patience: 7, dive: 1.6, spawnMul: 1.25, quotaMul: 1.15,
+    name: 'Těžká', lives: 3, speedMul: 1.25, patience: 6.5, dive: 1.6, spawnMul: 1.25, quotaMul: 1.15,
     swatRadius: 40, missBreaksCombo: true, comboWindow: 1.8, bossHpMul: 1.4, ninjaMinAlpha: 0.06, scoreMul: 2,
   },
 };

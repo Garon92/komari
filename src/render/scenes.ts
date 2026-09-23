@@ -10,6 +10,8 @@ export interface Light {
   /** 0..1 how much darkness it removes. */
   power: number;
   flicker?: boolean;
+  /** The player's own light (cursor / last tap) – gets a warm glow. */
+  aim?: boolean;
 }
 
 export interface Layout {
@@ -759,14 +761,16 @@ function paintCamp(g: CanvasRenderingContext2D, L: Layout, rng: Rng): void {
   const my = h * 0.16;
   const mr = Math.min(w, h) * 0.05;
   glow(g, mx, my, mr * 5, 'rgba(190,205,255,A)', 0.25);
-  g.fillStyle = '#fdf6d8';
+  g.save();
   g.beginPath();
   g.arc(mx, my, mr, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = '#0b1331';
+  g.clip();
+  g.fillStyle = '#fdf6d8';
   g.beginPath();
+  g.rect(mx - mr, my - mr, mr * 2, mr * 2);
   g.arc(mx + mr * 0.45, my - mr * 0.2, mr * 0.92, 0, Math.PI * 2);
-  g.fill();
+  g.fill('evenodd');
+  g.restore();
   // Forest silhouette.
   g.fillStyle = '#06110d';
   g.beginPath();

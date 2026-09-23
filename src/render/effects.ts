@@ -32,14 +32,14 @@ export function paintSplat(g: CanvasRenderingContext2D, x: number, y: number, R:
   g.closePath();
   g.fill();
   // Streaks in the swing direction.
-  const smear = R * (1.2 + 2.0 * s);
+  const smear = R * (0.9 + 1.3 * s);
   g.strokeStyle = `rgba(${col.dark},0.6)`;
   g.lineCap = 'round';
-  const streaks = 3 + Math.floor(Math.random() * 3);
+  const streaks = 2 + Math.floor(Math.random() * 3);
   for (let i = 0; i < streaks; i++) {
     const a = rand(-0.35, 0.35);
     const len = smear * (0.55 + Math.random() * 0.6);
-    const w = R * (0.16 + 0.22 * Math.random() * (0.5 + s));
+    const w = R * (0.12 + 0.16 * Math.random() * (0.5 + s));
     const curve = rand(-0.35, 0.35);
     const so = rand(-R * 0.25, R * 0.25);
     for (let k = 0; k < 2; k++) {
@@ -106,9 +106,9 @@ export class Effects {
         x: x + rand(-R * 0.5, R * 0.5),
         y: y + R * rand(0.2, 0.6),
         r: R * rand(0.1, 0.18) * (0.8 + strength * 0.4),
-        vy: rand(18, 60) + strength * 50,
+        vy: rand(14, 40) + strength * 30,
         age: 0,
-        life: rand(0.6, 1.9),
+        life: rand(0.4, 1.3),
       });
     }
     if (this.drips.length > 160) this.drips.splice(0, this.drips.length - 160);

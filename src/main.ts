@@ -631,6 +631,7 @@ if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
     resume,
     toStart,
     swat: (x: number, y: number, touch = false) => swatAt(x, y, touch),
+    jump: (n: number) => game.jumpToWave(n),
     state: () => ({
       phase: game.phase,
       mode: game.mode,

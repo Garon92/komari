@@ -139,7 +139,7 @@ export class Renderer {
         break;
       case 'kill': {
         const big = e.kind === 'queen' ? 3.2 : e.kind === 'fat' || e.fed ? 1.8 : 1;
-        const R = e.r * (e.fed ? 3.6 : 3) * (e.kind === 'queen' ? 1.1 : 1);
+        const R = e.r * (e.fed ? 2.8 : 2.2) * (e.kind === 'queen' ? 1.1 : 1);
         const strength = Math.min(1, 0.3 + (e.source === 'swat' ? 0.4 : 0.1) + (big > 1 ? 0.3 : 0));
         if (e.source === 'lamp') {
           // Zapped: a small burnt mark and sparks instead of a splat.
@@ -150,7 +150,7 @@ export class Renderer {
           this.fx.sparks(e.x, e.y, 14, '#c4b5fd', 220);
         } else {
           paintSplat(this.stainG, e.x, e.y, R, e.heading + Math.PI, strength, this.splatColor());
-          this.fx.addDrips(e.x, e.y, R, strength, Math.round((2 + Math.random() * 3) * big));
+          this.fx.addDrips(e.x, e.y, R, strength, Math.round((1 + Math.random() * 2) * big));
           this.fx.bits(e.x, e.y, 5 + Math.round(big * 2), 'rgba(40,45,55,0.8)', 160 * Math.sqrt(big));
         }
         if (e.kind === 'golden') this.fx.stars(e.x, e.y, 18, '#fde047');
@@ -221,10 +221,10 @@ export class Renderer {
   private lights(game: Game, pointer: PointerState): Light[] {
     const out = sceneLights(this.layout ? this.scene ?? 'kitchen' : 'kitchen', this.layout, this.time);
     const m = Math.min(this.w, this.h);
-    if (pointer.visible && !pointer.touch) out.push({ x: pointer.x, y: pointer.y, r: Math.max(150, m * 0.26) + game.swatRadius, power: 0.95 });
+    if (pointer.visible && !pointer.touch) out.push({ x: pointer.x, y: pointer.y, r: Math.max(150, m * 0.26) + game.swatRadius, power: 0.95, aim: true });
     if (this.touchLight) {
       const a = Math.max(0.25, 1 - this.touchLight.t / 2.5);
-      out.push({ x: this.touchLight.x, y: this.touchLight.y, r: Math.max(150, m * 0.3), power: 0.9 * a });
+      out.push({ x: this.touchLight.x, y: this.touchLight.y, r: Math.max(150, m * 0.3), power: 0.9 * a, aim: true });
     }
     if (game.lamp) out.push({ x: game.lamp.x, y: game.lamp.y, r: Math.max(220, m * 0.45), power: 1 });
     for (const q of game.mosquitoes) if (q.kind === 'golden') out.push({ x: q.x, y: q.y, r: 90, power: 0.8 });
@@ -255,7 +255,7 @@ export class Renderer {
       sg.save();
       sg.setTransform(1, 0, 0, 1, 0, 0);
       sg.globalCompositeOperation = 'destination-out';
-      sg.fillStyle = 'rgba(0,0,0,0.018)';
+      sg.fillStyle = 'rgba(0,0,0,0.03)';
       sg.fillRect(0, 0, this.stains.width, this.stains.height);
       sg.restore();
     }
@@ -468,6 +468,21 @@ export class Renderer {
       dg.fill();
     }
     this.g.drawImage(this.dark, 0, 0, this.w, this.h);
+    // A warm flashlight glow where the player aims.
+    const g = this.g;
+    g.save();
+    g.globalCompositeOperation = 'screen';
+    for (const l of lights) {
+      if (!l.aim) continue;
+      const rg = g.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r * 0.8);
+      rg.addColorStop(0, `rgba(255,236,190,${0.16 * l.power})`);
+      rg.addColorStop(1, 'rgba(255,236,190,0)');
+      g.fillStyle = rg;
+      g.beginPath();
+      g.arc(l.x, l.y, l.r * 0.8, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.restore();
   }
 
   private drawLamp(game: Game): void {

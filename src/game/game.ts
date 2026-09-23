@@ -280,6 +280,14 @@ export class Game {
     this.events.push({ type: 'waveStart', wave: n, spec });
   }
 
+  /** Debug / testing: jump straight to wave n (waves mode). */
+  jumpToWave(n: number): void {
+    if (this.mode !== 'waves') return;
+    for (const m of this.mosquitoes) m.dead = true;
+    this.mosquitoes = [];
+    this.beginWave(Math.max(1, Math.floor(n)));
+  }
+
   /** Intro banner length per phase. */
   private introLength(): number {
     if (this.mode !== 'waves') return 1.4;
@@ -746,8 +754,9 @@ export class Game {
   private clearWave(): void {
     const bonus = waveBonus({ wave: this.wave, bites: this.waveBites, swats: this.waveSwats, hits: this.waveHits }, this.difficulty);
     this.score += bonus.total;
-    if (bonus.flawless > 0) this.stats.flawlessWaves++;
-    if (bonus.sharp > 0 && accuracy(this.waveHits, this.waveSwats) >= 0.9 && this.waveSwats >= 10) this.stats.sharpWaves++;
+    // Achievements count only from wave 3 on (the first waves are a warm-up).
+    if (bonus.flawless > 0 && this.wave >= 3) this.stats.flawlessWaves++;
+    if (this.wave >= 3 && accuracy(this.waveHits, this.waveSwats) >= 0.9 && this.waveSwats >= 10) this.stats.sharpWaves++;
     this.events.push({ type: 'waveClear', wave: this.wave, bonus, accuracy: accuracy(this.waveHits, this.waveSwats), bites: this.waveBites });
     for (const m of this.mosquitoes) if (!m.dead && m.state !== 'leave') m.state = 'leave';
     this.phase = 'clear';

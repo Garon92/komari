@@ -3,6 +3,7 @@
 :root {
   --k-accent: #4fe18c;
   --k-accent-strong: #22c55e;
+  --k-accent-text: #15803d;
   --k-on-accent: #05260f;
   --k-danger: #f43f5e;
   --k-warn: #f59e0b;
@@ -27,6 +28,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     --k-bg: #0b1210;
+    --k-accent-text: #4ade80;
     --k-surface: rgba(20, 28, 26, 0.95);
     --k-surface-2: #1b2623;
     --k-border: rgba(255, 255, 255, 0.1);
@@ -41,6 +43,7 @@
 
 :root[data-theme='dark'] {
   --k-bg: #0b1210;
+  --k-accent-text: #4ade80;
   --k-surface: rgba(20, 28, 26, 0.95);
   --k-surface-2: #1b2623;
   --k-border: rgba(255, 255, 255, 0.1);
@@ -86,6 +89,10 @@ select {
 :focus-visible {
   outline: none;
   box-shadow: var(--k-focus);
+}
+
+[hidden] {
+  display: none !important;
 }
 
 .visually-hidden {
@@ -539,11 +546,11 @@ select {
 .toasts {
   position: absolute;
   z-index: 40;
-  top: 70px;
+  bottom: calc(76px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   gap: 8px;
   pointer-events: none;
   width: min(92vw, 380px);
@@ -755,7 +762,7 @@ select {
   margin-top: auto;
   font-size: 0.78rem;
   font-weight: 900;
-  color: var(--k-accent-strong);
+  color: var(--k-accent-text);
 }
 
 .segmented {
@@ -934,7 +941,7 @@ kbd {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
   gap: 8px;
   margin: 16px 0 6px;
 }
@@ -1260,23 +1267,19 @@ kbd {
   .mode {
     min-height: 0;
     display: grid;
-    grid-template-columns: auto 1fr auto;
-    grid-template-rows: auto auto;
+    grid-template-columns: auto 1fr;
     column-gap: 12px;
-    row-gap: 0;
+    row-gap: 1px;
     align-items: center;
     padding: 10px 12px;
   }
 
   .mode__icon {
-    grid-row: span 2;
+    grid-row: span 3;
   }
 
   .mode__best {
-    grid-row: span 2;
-    grid-column: 3;
     margin: 0;
-    text-align: right;
   }
 
   .hero canvas {
@@ -1308,9 +1311,6 @@ kbd {
     display: none;
   }
 
-  .appbar__title span {
-    display: none;
-  }
 }
 
 @media (max-height: 520px) and (orientation: landscape) {
