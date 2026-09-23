@@ -5,7 +5,8 @@ import { Audio } from './audio/audio';
 import { DIFFICULTIES, MODES, type Difficulty, type Mode, type SceneId } from './game/config';
 import { Game, type GameEvent, type Summary } from './game/game';
 import {
-  autoPause, countdown, haptic, openSettingsDialog, prefersReducedMotion, recordActivity, resolvedTheme, setHelp, settings, UI_ICONS,
+  appbarPauseButton, autoPause, confirmDialog, countdown, guardLeave, haptic, prefersReducedMotion, recordActivity, resetApp,
+  resolvedTheme, setHelp, setSettingsSection, settings,
 } from './kit';
 import { Renderer, type PointerState } from './render/renderer';
 import { bestKey, loadSave, writeSave, type Prefs, type SaveData } from './storage';
@@ -27,17 +28,9 @@ const audio = new Audio();
 const screens = new Screens($('banner'));
 const hud = new Hud($('hud'));
 
-// Pause lives in the appbar actions slot (48 px, outside the playfield – taps meant for mosquitoes never hit it).
-const pauseBtn = document.createElement('button');
-pauseBtn.type = 'button';
-pauseBtn.slot = 'actions';
-pauseBtn.className = 'g92-btn g92-btn--ghost g92-btn--icon';
-pauseBtn.setAttribute('aria-label', 'Pauza (Esc)');
-pauseBtn.title = 'Pauza';
-pauseBtn.innerHTML = UI_ICONS.pause;
+// Family pause button in the appbar (outside the playfield – taps meant for mosquitoes never hit it).
+const pauseBtn = appbarPauseButton(() => pause(), appbar);
 pauseBtn.hidden = true;
-pauseBtn.addEventListener('click', () => pause());
-appbar?.append(pauseBtn);
 function syncPauseBtn(): void {
   const show = game.isActive && !paused && game.phase !== 'dying';
   if (pauseBtn.hidden === show) pauseBtn.hidden = !show;
@@ -89,9 +82,9 @@ function changePrefs(p: Partial<Prefs>): void {
 
 // ------------------------------------------------------------------ appbar
 
-// The appbar "?" opens the kit's pictogram help (setHelp); we only pause the game first.
+// Appbar "?" = kit pictogram help (title "Jak hrát" comes from the kit for games). Opening any kit dialog
+// pauses the game via autoPause (g92-dialog-open) – no per-button handlers needed.
 setHelp({
-  title: 'Jak hrát',
   intro: 'Plácej komáry dřív, než tě štípnou. Kdo dlouho nedostane ránu, zvětší se a letí na tebe!',
   howTo: HOW_TO,
   keys: KEYS,
@@ -105,14 +98,9 @@ function helpExtra(): HTMLElement {
   b.addEventListener('click', () => screens.showHelp());
   return b;
 }
-appbar?.addEventListener('g92-help', () => {
-  if (game.isActive && !paused) pause();
-});
-appbar?.addEventListener('g92-settings', (e) => {
-  e.preventDefault();
-  if (game.isActive && !paused) pause();
-  openSettingsDialog({ extra: settingsExtra() });
-});
+
+// ⚙ always opens the kit settings dialog; our section = swatter look, blood, buzz and "Smazat postup".
+setSettingsSection({ extra: () => settingsExtra(), showVoice: false });
 
 function settingsExtra(): HTMLElement {
   const wrap = document.createElement('section');
@@ -120,22 +108,27 @@ function settingsExtra(): HTMLElement {
   const h = document.createElement('h3');
   h.className = 'g92-label';
   h.textContent = 'Komáři';
-  wrap.append(h, screens.swatterPanel(save, changePrefs, true));
+  const reset = document.createElement('button');
+  reset.type = 'button';
+  reset.className = 'g92-btn g92-btn--ghost g92-btn--block k-reset';
+  reset.innerHTML = 'Smazat postup…<small>rekordy, úspěchy a hodnost lovce</small>';
+  reset.addEventListener('click', async () => {
+    const yes = await confirmDialog({
+      title: 'Smazat postup?',
+      message: 'Zmizí rekordy, úspěchy, statistiky i hodnost lovce. Nastavení zvuku a vzhledu zůstane.',
+      confirmLabel: 'Smazat',
+      danger: true,
+    });
+    if (!yes) return;
+    resetApp('komari');
+    location.reload();
+  });
+  wrap.append(h, screens.swatterPanel(save, changePrefs, true), reset);
   return wrap;
 }
 
-function toggleFullscreen(): void {
-  const doc = document as Document & { webkitFullscreenElement?: Element; webkitExitFullscreen?: () => void };
-  const el = document.documentElement as HTMLElement & { webkitRequestFullscreen?: () => void };
-  if (document.fullscreenElement || doc.webkitFullscreenElement) {
-    if (document.exitFullscreen) void document.exitFullscreen().catch(() => undefined);
-    else doc.webkitExitFullscreen?.();
-  } else if (el.requestFullscreen) {
-    void el.requestFullscreen().catch(() => undefined);
-  } else {
-    el.webkitRequestFullscreen?.();
-  }
-}
+// Leaving via "Menu" (or reload) during a running game: pause and ask; "Zůstat" keeps the pause screen up.
+guardLeave({ isActive: () => game.isActive, onPause: () => pause() });
 
 // ------------------------------------------------------------------ layout
 
@@ -309,17 +302,26 @@ function showResults(): void {
   });
 }
 
-/** "Best score" for the g92 menu card: the best Vlny score (any difficulty), else the mode just played. */
+const POINTS = ['bod', 'body', 'bodů'] as const;
+const MOSQUITOES = ['komár', 'komáři', 'komárů'] as const;
+
+/**
+ * Menu card: the best Vlny score (any difficulty) as "Rekord: 1 200 bodů", else the mode just played;
+ * note = where to continue (mode · difficulty, reached wave, hunter rank).
+ */
 function reportActivity(s: Summary): void {
   const waveBests = (['easy', 'normal', 'hard'] as Difficulty[]).map((d) => save.bests[bestKey('waves', d)]?.score ?? 0);
   const bestWaves = Math.max(...waveBests);
   const cur = save.bests[bestKey(s.mode, s.difficulty)];
   const metric = bestWaves > 0
-    ? { label: 'Rekord', value: bestWaves }
+    ? { label: 'Rekord', value: bestWaves, unit: POINTS }
     : cur
-      ? { label: s.mode === 'zen' ? 'Zaplácnuto' : 'Rekord', value: s.mode === 'zen' ? cur.kills : cur.score }
+      ? s.mode === 'zen'
+        ? { label: 'Zaplácnuto', value: cur.kills, unit: MOSQUITOES }
+        : { label: 'Rekord', value: cur.score, unit: POINTS }
       : null;
-  recordActivity('komari', { metric, note: `${MODES[s.mode].name} · ${DIFFICULTIES[s.difficulty].name}` });
+  const where = `${MODES[s.mode].name} · ${DIFFICULTIES[s.difficulty].name}${s.mode === 'waves' ? ` · vlna ${s.wave}` : ''}`;
+  recordActivity('komari', { metric, note: `${where} · ${rankFor(save.stats.totalKills).rank.name}`, href: '/komari/' });
 }
 
 // ------------------------------------------------------------------ events → sound/ui
@@ -347,7 +349,8 @@ function checkAchievements(): void {
   gameAchievements.push(...found);
   writeSave(save);
   audio.achievement();
-  for (const id of found) screens.toastAchievement(id);
+  // In-game feedback drawn on the playfield (kit rule: no toasts over the game; the full list is on the results card).
+  found.forEach((id, i) => screens.achievementFlash(id, renderer, game.rect.y + 34 + i * 30));
 }
 
 function handle(e: GameEvent): boolean {
@@ -542,14 +545,7 @@ window.addEventListener('keydown', (e) => {
   if (screens.dialogOpen) return; // kit dialogs handle their own keys
   const target = e.target as HTMLElement | null;
   const onControl = Boolean(target && /^(BUTTON|INPUT|A|LABEL|SELECT|TEXTAREA)$/.test(target.tagName));
-  if (e.code === 'KeyM') {
-    settings.set({ sound: !settings.get().sound });
-    return;
-  }
-  if (e.code === 'KeyF' && !onControl) {
-    toggleFullscreen();
-    return;
-  }
+  // M (sound), F (fullscreen) and ? (help) are handled by <g92-appbar keys>.
   if (screens.current === 'pause') {
     if (e.code === 'Space' && !onControl) {
       e.preventDefault();

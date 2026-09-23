@@ -57,6 +57,7 @@ Za všechny zaplácnuté komáry roste **hodnost lovce** (Nováček → Plácal 
 Mistr plácačky → Legenda → Komáří noční můra).
 Ve výchozím stavu je hra pohádková: zaplácnutý komár udělá „pof!“ s hvězdičkami. Starší hráči si v nastavení (⚙)
 mohou zapnout realistické krvavé fleky; v Pohodě (pro nejmenší) se krev neukazuje nikdy. Bzučení komárů jde vypnout.
+Tamtéž je „Smazat postup…“ (rekordy, úspěchy, hodnost – s potvrzením).
 
 ## Vývoj
 

@@ -4,10 +4,11 @@ import type { Summary } from '../game/game';
 import type { WaveBonus } from '../game/scoring';
 import type { WaveSpec } from '../game/waves';
 import {
-  ICONS, openDialog, plural, showPause, showResults, showStart, toast, sfx,
+  DIFFICULTIES_3, ICONS, LABEL_ICONS, LABELS, openDialog, plural, showPause, showResults, showStart, sfx,
   type DialogHandle, type OverlayPromise, type PauseChoice, type ResultsChoice, type StartResult,
 } from '../kit';
 import { iconSvg } from '../render/icons';
+import type { Renderer } from '../render/renderer';
 import { paintPortrait } from '../render/mosquitoArt';
 import { drawSwatter, SWATTER_COLORS, SWATTER_SHAPES } from '../render/swatter';
 import { rankFor, type Rank } from '../ranks';
@@ -22,8 +23,7 @@ const esc = (s: string): string => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;',
 const fmt = (n: number): string => n.toLocaleString('cs-CZ');
 
 const MODE_ICON: Record<Mode, string> = { waves: '🌊', minute: '⏱️', zen: '🌼' };
-// Family-wide difficulty look (C-12): Lehká 🐢 / Normální 🐇 / Těžká 🔥.
-const DIFF_ICON: Record<Difficulty, string> = { easy: '🐢', normal: '🐇', hard: '🔥' };
+// Family-wide difficulty (kit DIFFICULTIES_3: Lehká 🐢 / Normální 🐇 / Těžká 🔥); our flavour goes into the hint.
 const DIFF_HINT: Record<Difficulty, string> = { easy: '5 srdíček', normal: '3 srdíčka', hard: 'rychlí komáři' };
 
 export type OverlayKind = 'start' | 'pause' | 'results';
@@ -194,7 +194,7 @@ export class Screens {
       subtitle: 'Bzzz… plácni je dřív, než štípnou!',
       backdrop: 'clear',
       className: 'k-overlay-start',
-      difficulties: (Object.keys(DIFFICULTIES) as Difficulty[]).map((d) => ({ id: d, label: DIFFICULTIES[d].name, icon: DIFF_ICON[d], hint: DIFF_HINT[d] })),
+      difficulties: DIFFICULTIES_3.map((d) => ({ ...d, hint: DIFF_HINT[d.id] })),
       difficulty: diff,
       compact: true,
       showHowTo: !save.prefs.seenHelp,
@@ -285,8 +285,8 @@ export class Screens {
     const p = showPause({
       subtitle: `${MODES[info.mode].name} · ${DIFFICULTIES[info.difficulty].name}`,
       stats,
-      menuHref: null,
-      menuLabel: 'Ukončit hru',
+      // Family wording: Pokračovat · Hrát znovu · Ukončit hru (→ results, then Domů) · Menu (leaves the app).
+      quit: true,
       className: 'k-overlay-pause',
     });
     // Secondary buttons below the main actions (kit `extra` would put them above "Pokračovat").
@@ -294,7 +294,8 @@ export class Screens {
     this.track<PauseChoice>('pause', p, (v) => {
       if (v === 'resume') act.resume();
       else if (v === 'restart') act.restart();
-      else act.quit();
+      else if (v === 'quit') act.quit();
+      // 'menu': the kit navigates to /menu/ itself (explicit choice, no second question).
     });
   }
 
@@ -339,7 +340,7 @@ export class Screens {
       stats,
       lost: s.mode === 'waves' && s.stars === 0 && !info.isRecord,
       // C-07 wording: in-app home = "Domů" 🏠, leaving the app = "Menu".
-      actions: [{ label: 'Domů', value: 'start', variant: 'soft', icon: iconSvg('home', 20) }],
+      actions: [{ label: LABELS.home, value: 'start', variant: 'soft', icon: LABEL_ICONS.home }],
       extra,
       className: 'k-overlay-results',
     });
@@ -567,9 +568,10 @@ export class Screens {
     this.bannerEl.innerHTML = '';
   }
 
-  toastAchievement(id: string): void {
+  /** New achievement mid-game: a floating line on the playfield (no toast over the game – kit rule 5). */
+  achievementFlash(id: string, renderer: Renderer, y: number): void {
     const a = achievementById(id);
     if (!a) return;
-    toast(`Nový úspěch: ${a.title}`, { variant: 'accent', icon: `<span style="font-size:20px;line-height:22px">${a.icon}</span>`, duration: 3200 });
+    renderer.fx.text(renderer.w / 2, y, `${a.icon} Nový úspěch: ${a.title}`, '#fde047', 20, 2.6);
   }
 }

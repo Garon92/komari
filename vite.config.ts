@@ -1,7 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import { g92Pwa } from './src/kit/pwa.ts';
+import { g92NotFoundPage, g92Pwa } from './src/kit/pwa.ts';
 
 export default defineConfig({
   base: '/komari/',
@@ -10,6 +10,7 @@ export default defineConfig({
   build: { target: 'es2022', sourcemap: false },
   plugins: [
     VitePWA(g92Pwa('komari')),
+    g92NotFoundPage('komari'),
   ],
   test: {
     environment: 'node',

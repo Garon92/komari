@@ -841,6 +841,21 @@ body {
   gap: 6px;
 }
 
+.k-reset {
+  margin-top: 8px;
+  flex-direction: column;
+  gap: 0;
+  white-space: normal;
+  color: var(--g92-danger);
+  line-height: 1.2;
+}
+
+.k-reset small {
+  font-weight: var(--g92-fw-medium);
+  font-size: var(--g92-fs-xs);
+  color: var(--g92-text-muted);
+}
+
 /* ---------------------------------------------------------------- responsive */
 
 @media (max-width: 560px) {
@@ -1057,13 +1072,6 @@ body {
   .banner__new {
     display: none;
   }
-}
-
-/* Game overlays: vertical scroll yes, page pinch-zoom no (C-27). */
-.g92-overlay--start,
-.g92-overlay--pause,
-.g92-overlay--results {
-  touch-action: pan-y;
 }
 
 /* Results: long titles ("Komáři vyhráli… zatím!") shouldn't take two huge lines. */

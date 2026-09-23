@@ -251,6 +251,56 @@ for (const vp of [{ width: 1180, height: 820 }, { width: 1440, height: 900 }]) {
   await ctx.close();
 }
 
+// ---------------------------------------------------------------- Kit v0.7 family rules (phase B)
+{
+  const vp = { width: 390, height: 844 };
+  const { ctx, page } = await open(vp, { touch: true, seen: true });
+  const basics = await page.evaluate(() => ({ game: document.documentElement.classList.contains('g92-game'), title: document.title, keys: document.querySelector('g92-appbar')?.hasAttribute('keys') }));
+  ok('C-19/C-27/C-22', basics.game && basics.title === 'Komáři – Plácni je všechny!' && basics.keys, `html.g92-game=${basics.game}, title "${basics.title}", appbar keys=${basics.keys}`);
+  // M toggles the sound exactly once (appbar keys; our own handler removed).
+  const before = await page.evaluate(() => JSON.parse(localStorage.getItem('g92:settings') ?? '{}').sound !== false);
+  await page.keyboard.press('m');
+  await page.waitForTimeout(200);
+  const after = await page.evaluate(() => JSON.parse(localStorage.getItem('g92:settings') ?? '{}').sound !== false);
+  await page.keyboard.press('m');
+  ok('C-22', before !== after, `M toggles sound once (${before} → ${after})`);
+  // C-01 leave guard: "Menu" during a running wave asks, "Zůstat" keeps the game (paused).
+  await page.evaluate(() => window.__komari.play('waves', 'normal'));
+  await page.waitForTimeout(2500);
+  await page.evaluate(() => {
+    const bar = document.querySelector('g92-appbar');
+    const root = bar.shadowRoot ?? bar;
+    const link = [...root.querySelectorAll('a, button')].find((el) => /menu/i.test(el.getAttribute('aria-label') ?? el.textContent ?? ''));
+    link?.click();
+  });
+  await page.waitForTimeout(700);
+  const g = await page.evaluate(() => ({ url: location.pathname, dialog: document.querySelector('dialog[open]')?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 80), paused: window.__komari.state().paused }));
+  await page.screenshot({ path: `${shots}/qa-c01-leave-guard-390.png` });
+  ok('C-01', g.url === '/komari/' && /Odejít do menu/.test(g.dialog ?? '') && g.paused, `Menu mid-game → dialog "${g.dialog}", paused=${g.paused}, still on ${g.url}`);
+  await page.getByRole('button', { name: 'Zůstat' }).click();
+  await page.waitForTimeout(500);
+  const stay = await page.evaluate(() => ({ url: location.pathname, screen: window.__komari.state().screen, paused: window.__komari.state().paused }));
+  ok('C-01', stay.url === '/komari/' && stay.paused && stay.screen === 'pause', `"Zůstat" → still here, pause overlay (${stay.screen})`);
+  // Pause overlay: family words (Pokračovat · Hrát znovu · Ukončit hru · Menu).
+  const words = await page.evaluate(() => document.querySelector('.g92-overlay--pause')?.textContent?.replace(/\s+/g, ' ') ?? '');
+  ok('C-07', ['Pokračovat', 'Hrát znovu', 'Ukončit hru', 'Menu'].every((w) => words.includes(w)), `pause words: ${words.slice(0, 120)}`);
+  await page.screenshot({ path: `${shots}/qa-c07-pause-390.png` });
+  // ⚙ = kit settings dialog with the Komáři section (swatter, blood, buzz, reset).
+  await page.evaluate(() => { const bar = document.querySelector('g92-appbar'); const root = bar.shadowRoot ?? bar; [...root.querySelectorAll('button')].find((b) => /nastaven/i.test(b.getAttribute('aria-label') ?? ''))?.click(); });
+  await page.waitForTimeout(600);
+  const set = await page.evaluate(() => document.querySelector('dialog[open]')?.textContent ?? '');
+  ok('C-11', /Tvar plácačky/.test(set) && /Krvavé fleky/.test(set) && /Smazat postup/.test(set), 'settings dialog contains the Komáři section (tvar, krev, smazat postup)');
+  await page.evaluate(() => { const d = document.querySelector('dialog[open] .g92-dialog__body'); if (d) d.scrollTop = 9999; });
+  await page.screenshot({ path: `${shots}/qa-c11-settings-390.png` });
+  await page.keyboard.press('Escape');
+  // Start screen difficulty uses DIFFICULTIES_3.
+  await page.evaluate(() => window.__komari.toStart());
+  await page.waitForTimeout(600);
+  const diffs = await page.evaluate(() => [...document.querySelectorAll('.g92-difficulty__label')].map((e) => e.textContent).join('/'));
+  ok('C-12', diffs === 'Lehká/Normální/Těžká', `difficulties ${diffs}`);
+  await ctx.close();
+}
+
 console.log(`\n${results.filter((r) => r.pass).length}/${results.length} checks passed`);
 console.log('console errors', errors.length ? errors : 'none');
 await browser.close();
