@@ -10,6 +10,7 @@ import {
 import { iconSvg } from '../render/icons';
 import { paintPortrait } from '../render/mosquitoArt';
 import { drawSwatter, SWATTER_COLORS, SWATTER_SHAPES } from '../render/swatter';
+import { rankFor, type Rank } from '../ranks';
 import { bestKey, type Prefs, type SaveData } from '../storage';
 
 /**
@@ -90,6 +91,8 @@ export interface ResultInfo {
   best: number;
   isRecord: boolean;
   newAchievements: string[];
+  /** Set when the player reached a new hunter rank in this game. */
+  rankUp: Rank | null;
 }
 
 export class Screens {
@@ -169,7 +172,15 @@ export class Screens {
       <button type="button" class="g92-btn g92-btn--soft" data-ach>${iconSvg('trophy', 20)}<span>Úspěchy ${unlocked}/${ACHIEVEMENTS.length}</span></button>
       <button type="button" class="g92-btn g92-btn--soft" data-swatter>${iconSvg('swatter', 20)}<span>Plácačka</span></button>
     </div>`);
-    const foot = el(`<p class="k-foot">${save.stats.totalKills > 0 ? `Celkem zaplácnuto: <b>${fmt(save.stats.totalKills)}</b> komárů` : 'Tip: zkus plácnout komáry i tady kolem.'}</p>`);
+    const r = rankFor(save.stats.totalKills);
+    const foot = el(`<div class="k-foot k-rank" title="Hodnost podle všech zaplácnutých komárů">
+      <span class="k-rank__icon" aria-hidden="true">${r.rank.icon}</span>
+      <div class="k-rank__text">
+        <b>${esc(r.rank.name)}</b>
+        <small>${r.next ? `Další: ${esc(r.next.name)} (ještě ${fmt(r.toNext)})` : 'Nejvyšší hodnost!'} · celkem ${fmt(save.stats.totalKills)}</small>
+        <div class="g92-progress g92-progress--sm" style="--value:${r.progress.toFixed(3)}" role="progressbar" aria-label="Postup k další hodnosti" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(r.progress * 100)}"></div>
+      </div>
+    </div>`);
 
     const p = showStart({
       appId: 'komari',
@@ -302,9 +313,9 @@ export class Screens {
                 ? 'Dobrý začátek!'
                 : 'Komáři vyhráli… zatím!';
     const achs = info.newAchievements.map((id) => achievementById(id)).filter((a): a is NonNullable<typeof a> => Boolean(a));
-    const extra = achs.length
-      ? el(`<div class="k-newach">${achs.map((a) => `<div><span aria-hidden="true">${a.icon}</span> Nový úspěch: <b>${esc(a.title)}</b></div>`).join('')}</div>`)
-      : undefined;
+    const lines = achs.map((a) => `<div><span aria-hidden="true">${a.icon}</span><span>Nový úspěch: <b>${esc(a.title)}</b></span></div>`);
+    if (info.rankUp) lines.unshift(`<div class="is-rank"><span aria-hidden="true">${info.rankUp.icon}</span><span>Nová hodnost: <b>${esc(info.rankUp.name)}</b></span></div>`);
+    const extra = lines.length ? el(`<div class="k-newach">${lines.join('')}</div>`) : undefined;
     const p = showResults({
       title,
       subtitle: `${MODES[s.mode].name} · ${DIFFICULTIES[s.difficulty].name}`,

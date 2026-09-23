@@ -10,7 +10,8 @@ import {
 import { Renderer, type PointerState } from './render/renderer';
 import { bestKey, loadSave, writeSave, type Prefs, type SaveData } from './storage';
 import { Hud } from './ui/hud';
-import { HOW_TO, KEYS, Screens } from './ui/screens';
+import { rankFor } from './ranks';
+import { HOW_TO, KEYS, Screens, type ResultInfo } from './ui/screens';
 
 // ------------------------------------------------------------------ setup
 
@@ -31,7 +32,7 @@ const keysHeld = new Set<string>();
 let paused = false;
 let gameAchievements: string[] = [];
 let resultsTimer = 0;
-let lastSummary: { s: Summary; info: { best: number; isRecord: boolean; newAchievements: string[] } } | null = null;
+let lastSummary: { s: Summary; info: ResultInfo } | null = null;
 
 function applyPrefs(): void {
   renderer.prefs = {
@@ -233,7 +234,10 @@ function onGameOver(s: Summary): void {
     save.bests[key] = { score: s.score, wave: s.wave, kills: s.kills, combo: s.bestCombo, stars: s.stars, date: new Date().toISOString() };
   }
   const st = save.stats;
+  const rankBefore = rankFor(st.totalKills).index;
   st.totalKills += s.kills;
+  const rankAfter = rankFor(st.totalKills);
+  const rankUp = rankAfter.index > rankBefore ? rankAfter.rank : null;
   st.games += 1;
   st.bestCombo = Math.max(st.bestCombo, s.bestCombo);
   st.playSeconds += s.duration;
@@ -248,7 +252,7 @@ function onGameOver(s: Summary): void {
   writeSave(save);
   reportActivity(s);
   for (const id of life) screens.toastAchievement(id);
-  lastSummary = { s, info: { best: Math.max(prevValue, value), isRecord, newAchievements: [...gameAchievements] } };
+  lastSummary = { s, info: { best: Math.max(prevValue, value), isRecord, newAchievements: [...gameAchievements], rankUp } };
   resultsTimer = window.setTimeout(() => {
     stage.classList.remove('is-playing');
     hud.show(false);

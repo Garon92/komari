@@ -524,6 +524,42 @@ body {
   margin: 0;
 }
 
+.k-rank {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--g92-radius-md);
+  background: var(--g92-surface-2);
+  text-align: left;
+}
+
+.k-rank__icon {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.k-rank__text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.k-rank__text b {
+  color: var(--g92-text);
+  font-weight: var(--g92-fw-black);
+}
+
+.k-rank__text small {
+  font-size: var(--g92-fs-xs);
+}
+
+.k-newach .is-rank {
+  background: var(--accent-soft);
+}
+
 .k-newach {
   display: grid;
   gap: 6px;
