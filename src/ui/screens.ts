@@ -281,7 +281,7 @@ export class Screens {
   showResults(s: Summary, info: ResultInfo, act: ResultActions): void {
     const stat = (label: string, value: string | number) => ({ label, value });
     const time = `${Math.floor(s.duration / 60)}:${String(Math.floor(s.duration % 60)).padStart(2, '0')}`;
-    const acc = `${Math.round(s.accuracy * 100)} %`;
+    const acc = s.swats > 0 ? `${Math.round(s.accuracy * 100)} %` : '–';
     const powers = String(s.powers.length);
     const stats =
       s.mode === 'waves'
@@ -310,7 +310,7 @@ export class Screens {
       subtitle: `${MODES[s.mode].name} · ${DIFFICULTIES[s.difficulty].name}`,
       score: s.mode === 'zen' ? s.kills : s.score,
       scoreLabel: s.mode === 'zen' ? 'komárů' : 'bodů',
-      best: info.best,
+      best: info.best > 0 ? info.best : null,
       isNewBest: info.isRecord,
       stars: s.stars,
       stats,
