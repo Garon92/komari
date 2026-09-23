@@ -583,6 +583,7 @@ if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
     game,
     renderer,
     save,
+    pointer,
     play,
     pause,
     resume,
