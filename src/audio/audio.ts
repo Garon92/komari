@@ -319,7 +319,7 @@ export class Audio {
       const filter = ctx.createBiquadFilter();
       filter.type = 'bandpass';
       filter.frequency.value = 1400;
-      filter.Q.value = 1.1;
+      filter.Q.value = 0.8;
       const mix2 = ctx.createGain();
       mix2.gain.value = 0.35;
       const gain = ctx.createGain();
@@ -343,7 +343,7 @@ export class Audio {
     this.voices.forEach((v, i) => {
       const s = sources[i];
       const level = s ? Math.min(1, s.level) : 0;
-      v.gain.gain.setTargetAtTime(level * 0.075, t, 0.06);
+      v.gain.gain.setTargetAtTime(level * 0.12, t, 0.06);
       if (s) {
         v.osc.frequency.setTargetAtTime(s.freq, t, 0.05);
         v.osc2.frequency.setTargetAtTime(s.freq * 1.005, t, 0.05);

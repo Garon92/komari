@@ -720,7 +720,7 @@ export class Renderer {
       const d = Math.hypot(m.x - lx, m.y - ly);
       const prox = Math.max(0, 1 - d / range);
       const diveBoost = m.state === 'dive' ? 0.4 + m.dive * 0.8 : 0;
-      const level = Math.min(1, prox * prox * 0.9 + diveBoost + (m.kind === 'queen' ? 0.3 : 0)) * (m.kind === 'ninja' ? 0.6 : 1);
+      const level = Math.min(1, Math.pow(prox, 1.5) * 0.9 + diveBoost + (m.kind === 'queen' ? 0.3 : 0)) * (m.kind === 'ninja' ? 0.6 : 1);
       const freq = KINDS[m.kind].buzz * (m.state === 'dive' ? 1 + m.dive * 0.25 : 1) * (m.fed ? 0.8 : 1);
       return { level, pan: (m.x - this.w / 2) / (this.w / 2), freq };
     });

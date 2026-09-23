@@ -586,6 +586,7 @@ if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
     renderer,
     save,
     pointer,
+    audio,
     play,
     pause,
     resume,
