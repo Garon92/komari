@@ -247,6 +247,7 @@ export class Screens {
       stats,
       menuHref: null,
       menuLabel: info.mode === 'zen' ? 'Dokončit' : 'Ukončit hru',
+      className: 'k-overlay-pause',
     });
     // Secondary buttons below the main actions (kit `extra` would put them above "Pokračovat").
     p.el.querySelector('.g92-overlay__actions')?.append(extra);
@@ -270,9 +271,8 @@ export class Screens {
         : s.mode === 'minute'
           ? [stat('Zaplácnuto', s.kills), stat('Kombo', s.bestCombo), stat('Přesnost', acc), stat('Štípanců', s.bites), stat('Jednou ranou', s.maxMulti), stat('Vylepšení', powers)]
           : [stat('Skóre', s.score), stat('Kombo', s.bestCombo), stat('Přesnost', acc), stat('Jednou ranou', s.maxMulti), stat('Vylepšení', powers), stat('Čas', time)];
-    const title = info.isRecord
-      ? 'Nový rekord!'
-      : s.mode === 'minute'
+    const title =
+      s.mode === 'minute'
         ? 'Čas vypršel!'
         : s.mode === 'zen'
           ? 'Pěkně vyplácáno!'
@@ -280,7 +280,9 @@ export class Screens {
             ? 'Mistr plácačky!'
             : s.stars >= 1
               ? 'Dobrá práce!'
-              : 'Komáři vyhráli… zatím!';
+              : info.isRecord
+                ? 'Dobrý začátek!'
+                : 'Komáři vyhráli… zatím!';
     const achs = info.newAchievements.map((id) => achievementById(id)).filter((a): a is NonNullable<typeof a> => Boolean(a));
     const extra = achs.length
       ? el(`<div class="k-newach">${achs.map((a) => `<div><span aria-hidden="true">${a.icon}</span> Nový úspěch: <b>${esc(a.title)}</b></div>`).join('')}</div>`)
@@ -297,7 +299,21 @@ export class Screens {
       lost: s.mode === 'waves' && s.stars === 0 && !info.isRecord,
       actions: [{ label: 'Úvod', value: 'start', variant: 'soft', icon: iconSvg('home', 20) }],
       extra,
+      className: 'k-overlay-results',
     });
+    // Group the panel into two halves (side by side on landscape phones, stacked otherwise).
+    const panel = p.el.querySelector<HTMLElement>('.g92-overlay__panel');
+    if (panel) {
+      const left = document.createElement('div');
+      left.className = 'k-res-half k-res-left';
+      const right = document.createElement('div');
+      right.className = 'k-res-half k-res-right';
+      for (const child of Array.from(panel.children)) {
+        const toRight = child.matches('.g92-overlay__stats, .k-newach, .g92-overlay__actions');
+        (toRight ? right : left).append(child);
+      }
+      panel.append(left, right);
+    }
     this.track<ResultsChoice>('results', p, (v) => {
       if (v === 'again') act.again();
       else if (v === 'start') act.start();

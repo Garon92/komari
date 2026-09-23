@@ -30,7 +30,7 @@ export const KINDS: Record<MosquitoKind, KindDef> = {
   },
   fast: {
     name: 'Rychlík',
-    desc: 'Malý a hrozně rychlý. Za to je za 20 bodů.',
+    desc: 'Malý a hrozně rychlý. Zato víc bodů!',
     radius: [7, 8.5], speed: [160, 220], hp: 1, points: 20, patienceMul: 0.9, buzz: 760, bites: true,
   },
   tiger: {
@@ -40,7 +40,7 @@ export const KINDS: Record<MosquitoKind, KindDef> = {
   },
   ninja: {
     name: 'Nindža',
-    desc: 'Umí se zneviditelnit. Hledej ho pořádně – a svítí na něj plácačka.',
+    desc: 'Umí se zneviditelnit. Ve světle plácačky ho ale uvidíš.',
     radius: [9, 11], speed: [70, 120], hp: 1, points: 30, patienceMul: 1.1, buzz: 600, bites: true,
   },
   fat: {
