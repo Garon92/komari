@@ -1007,10 +1007,12 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hud__combo.bump,
-  .heart.is-lost,
-  .hud__timer.is-low,
-  .banner__card {
+  :root:not([data-motion='full']) :is(.hud__combo.bump, .heart.is-lost, .hud__timer.is-low, .banner__card) {
     animation: none;
   }
+}
+
+/* Forced by the g92 settings ("Animace: Méně"). */
+:root[data-motion='reduce'] :is(.hud__combo.bump, .heart.is-lost, .hud__timer.is-low, .banner__card) {
+  animation: none;
 }

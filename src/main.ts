@@ -320,6 +320,7 @@ function handle(e: GameEvent): boolean {
       if (e.source === 'lamp') audio.lampZap(pan(e.x));
       else audio.splat(e.kind === 'fat' || e.fed ? 1.6 : e.kind === 'queen' ? 2.2 : 1, pan(e.x));
       if (e.kind === 'golden') audio.pickup();
+      if (e.revenge && game.mode === 'minute') renderer.fx.text(e.x, e.y - 72, '+3 s', '#86efac', 22, 1.3);
       return game.phase !== 'menu';
     case 'hurt':
       audio.hurt(pan(e.x));
@@ -338,6 +339,7 @@ function handle(e: GameEvent): boolean {
       else {
         audio.bite();
         haptic('error');
+        if (game.mode === 'minute') renderer.fx.text(e.x, e.y - 60, '−3 s', '#fca5a5', 24, 1.3);
       }
       return false;
     case 'powerDrop':
