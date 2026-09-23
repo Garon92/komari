@@ -26,6 +26,25 @@ const DIFF_HINT: Record<Difficulty, string> = { easy: '5 srdíček', normal: '3 
 
 export type OverlayKind = 'start' | 'pause' | 'results';
 
+/** Pictogram how-to (start screen "Jak hrát" and the appbar "?"). */
+export const HOW_TO = [
+  { icon: '👆', text: 'Klikni nebo ťukni na komára – plesk!' },
+  { icon: '❗', text: 'Červený kruh = chce štípnout. Plácni ho včas!' },
+  { icon: '❤️', text: 'Štípnutí bere srdíčko. Dohoň štípala a vrátí se.' },
+  { icon: '🔥', text: 'Rychle za sebou bez minutí = kombo ×2 až ×5.' },
+  { icon: '🫧', text: 'Bublina po komárovi = vylepšení. Plácni na ni!' },
+  { icon: '👑', text: 'Každá pátá vlna: královna komárů.' },
+];
+
+export const KEYS = [
+  { keys: ['←', '↑', '→', '↓'], text: 'posun plácačky' },
+  { keys: ['Enter', 'X'], text: 'plácnout' },
+  { keys: ['Esc', 'P', 'Mezerník'], text: 'pauza' },
+  { keys: ['R'], text: 'hrát znovu' },
+  { keys: ['F'], text: 'celá obrazovka' },
+  { keys: ['M'], text: 'zvuk' },
+];
+
 function el(html: string): HTMLElement {
   const t = document.createElement('template');
   t.innerHTML = html.trim();
@@ -159,32 +178,23 @@ export class Screens {
       className: 'k-overlay-start',
       difficulties: (Object.keys(DIFFICULTIES) as Difficulty[]).map((d) => ({ id: d, label: DIFFICULTIES[d].name, icon: DIFF_ICON[d], hint: DIFF_HINT[d] })),
       difficulty: diff,
+      compact: true,
       showHowTo: !save.prefs.seenHelp,
-      howTo: [
-        { icon: '👆', text: 'Klikni nebo ťukni na komára – plesk!' },
-        { icon: '❗', text: 'Červený kruh = chce štípnout. Plácni ho včas!' },
-        { icon: '❤️', text: 'Štípnutí bere srdíčko. Dohoň štípala a vrátí se.' },
-        { icon: '🔥', text: 'Rychle za sebou bez minutí = kombo ×2 až ×5.' },
-        { icon: '🫧', text: 'Bublina po komárovi = vylepšení. Plácni na ni!' },
-        { icon: '👑', text: 'Každá pátá vlna: královna komárů.' },
-      ],
-      keys: [
-        { keys: ['←', '↑', '→', '↓'], text: 'posun plácačky' },
-        { keys: ['Enter', 'X'], text: 'plácnout' },
-        { keys: ['Esc', 'P', 'Mezerník'], text: 'pauza' },
-        { keys: ['R'], text: 'hrát znovu' },
-        { keys: ['F'], text: 'celá obrazovka' },
-        { keys: ['M'], text: 'zvuk' },
-      ],
+      howTo: HOW_TO,
+      keys: KEYS,
+      extra,
     });
-    // Kit v0.4: `extra` can't be used with showStart (its actions live inside the view), so insert manually.
-    const view = p.el.querySelector<HTMLElement>('.g92-overlay__view');
-    const actions = view?.querySelector<HTMLElement>(':scope > .g92-overlay__actions');
-    const diffSection = view?.querySelector<HTMLElement>(':scope > .g92-overlay__section');
-    if (view && actions) {
-      view.insertBefore(extra, diffSection ?? actions);
-      actions.append(more);
-      view.append(foot);
+    // Mode picker joins the hero (above the difficulty picker; left column on landscape phones),
+    // small buttons + tip go below "Hrát".
+    const main = p.el.querySelector<HTMLElement>('.g92-overlay__view');
+    const extraWrap = main?.querySelector<HTMLElement>('.g92-overlay__extra');
+    const hero = main?.querySelector<HTMLElement>('.g92-overlay__hero');
+    const diffSection = main?.querySelector<HTMLElement>('.g92-overlay__section');
+    if (extraWrap && hero) hero.append(extraWrap);
+    else if (extraWrap && diffSection) diffSection.before(extraWrap);
+    const actions = main?.querySelector<HTMLElement>('.g92-overlay__actions');
+    if (actions) {
+      actions.append(more, foot);
       // Pull the kit's "Jak hrát" button into our row of small buttons (saves a full-width row).
       const how = actions.querySelector<HTMLElement>(':scope > .g92-btn--secondary');
       if (how) {
@@ -309,19 +319,6 @@ export class Screens {
       extra,
       className: 'k-overlay-results',
     });
-    // Group the panel into two halves (side by side on landscape phones, stacked otherwise).
-    const panel = p.el.querySelector<HTMLElement>('.g92-overlay__panel');
-    if (panel) {
-      const left = document.createElement('div');
-      left.className = 'k-res-half k-res-left';
-      const right = document.createElement('div');
-      right.className = 'k-res-half k-res-right';
-      for (const child of Array.from(panel.children)) {
-        const toRight = child.matches('.g92-overlay__stats, .k-newach, .g92-overlay__actions');
-        (toRight ? right : left).append(child);
-      }
-      panel.append(left, right);
-    }
     this.track<ResultsChoice>('results', p, (v) => {
       if (v === 'again') act.again();
       else if (v === 'start') act.start();

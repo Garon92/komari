@@ -5,12 +5,12 @@ import { Audio } from './audio/audio';
 import { DIFFICULTIES, MODES, type Difficulty, type Mode, type SceneId } from './game/config';
 import { Game, type GameEvent, type Summary } from './game/game';
 import {
-  autoPause, countdown, haptic, openSettingsDialog, prefersReducedMotion, recordActivity, resolvedTheme, settings,
+  autoPause, countdown, haptic, openSettingsDialog, prefersReducedMotion, recordActivity, resolvedTheme, setHelp, settings,
 } from './kit';
 import { Renderer, type PointerState } from './render/renderer';
 import { bestKey, loadSave, writeSave, type Prefs, type SaveData } from './storage';
 import { Hud } from './ui/hud';
-import { Screens } from './ui/screens';
+import { HOW_TO, KEYS, Screens } from './ui/screens';
 
 // ------------------------------------------------------------------ setup
 
@@ -64,9 +64,24 @@ function changePrefs(p: Partial<Prefs>): void {
 
 // ------------------------------------------------------------------ appbar
 
+// The appbar "?" opens the kit's pictogram help (setHelp); we only pause the game first.
+setHelp({
+  title: 'Jak hrát',
+  intro: 'Plácej komáry dřív, než tě štípnou. Kdo dlouho nedostane ránu, zvětší se a letí na tebe!',
+  howTo: HOW_TO,
+  keys: KEYS,
+  extra: helpExtra(),
+});
+function helpExtra(): HTMLElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'g92-btn g92-btn--soft g92-btn--block';
+  b.textContent = 'Druhy komárů a vylepšení';
+  b.addEventListener('click', () => screens.showHelp());
+  return b;
+}
 appbar?.addEventListener('g92-help', () => {
   if (game.isActive && !paused) pause();
-  screens.showHelp();
 });
 appbar?.addEventListener('g92-settings', (e) => {
   e.preventDefault();
