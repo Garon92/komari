@@ -1020,19 +1020,17 @@ body {
   }
 
   .k-mode b {
-    font-size: var(--g92-fs-sm);
-  }
-
-  .k-mode b,
-  .k-mode__best {
+    font-size: 0.72rem;
+    letter-spacing: -0.01em;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  /* Records are on the mode cards elsewhere and in "Úspěchy"; here the cards stay one line. */
   .k-mode__best {
-    font-size: 0.66rem;
+    display: none;
   }
 
   .k-more .g92-btn {
