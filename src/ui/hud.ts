@@ -16,6 +16,7 @@ export class Hud {
   private timerEl: HTMLElement;
   private livesEl: HTMLElement;
   private powersEl: HTMLElement;
+  private comboLeft = -1;
   private last = { score: -1, mul: -1, combo: -1, wave: '', pct: -1, time: -1, lives: -1, maxLives: -1, powers: '' };
 
   constructor(root: HTMLElement, onPause: () => void) {
@@ -89,6 +90,14 @@ export class Hud {
         this.comboEl.classList.remove('bump');
         void this.comboEl.offsetWidth;
         this.comboEl.classList.add('bump');
+      }
+    }
+    if (game.combo >= 2) {
+      // Remaining combo time as a draining underline (quantised to limit style writes).
+      const left = Math.round(Math.max(0, 1 - game.comboT / game.diff.comboWindow) * 40) / 40;
+      if (left !== this.comboLeft) {
+        this.comboLeft = left;
+        this.comboEl.style.setProperty('--left', String(left));
       }
     }
 

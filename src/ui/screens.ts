@@ -159,6 +159,7 @@ export class Screens {
       className: 'k-overlay-start',
       difficulties: (Object.keys(DIFFICULTIES) as Difficulty[]).map((d) => ({ id: d, label: DIFFICULTIES[d].name, icon: DIFF_ICON[d], hint: DIFF_HINT[d] })),
       difficulty: diff,
+      showHowTo: !save.prefs.seenHelp,
       howTo: [
         { icon: '👆', text: 'Klikni nebo ťukni na komára – plesk!' },
         { icon: '❗', text: 'Červený kruh = chce štípnout. Plácni ho včas!' },

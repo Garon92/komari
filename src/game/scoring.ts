@@ -78,9 +78,9 @@ export function starsFor(mode: Mode, result: { wave: number; score: number; kill
     return 0;
   }
   if (mode === 'minute') {
-    if (result.kills >= 55) return 3;
-    if (result.kills >= 35) return 2;
-    if (result.kills >= 18) return 1;
+    if (result.kills >= 75) return 3;
+    if (result.kills >= 45) return 2;
+    if (result.kills >= 20) return 1;
     return 0;
   }
   if (result.kills >= 100) return 3;

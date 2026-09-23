@@ -960,7 +960,7 @@ export function drawAmbient(g: CanvasRenderingContext2D, id: SceneId, L: Layout,
   }
   if (id === 'bedroom') {
     const K = L.kid;
-    g.font = `800 ${Math.round(K.r * 0.55)}px Nunito, system-ui, sans-serif`;
+    g.font = `800 ${Math.round(K.r * 0.55)}px "Nunito Variable", Nunito, system-ui, sans-serif`;
     g.textAlign = 'center';
     for (let i = 0; i < 3; i++) {
       const p = ((t * 0.35 + i / 3) % 1);

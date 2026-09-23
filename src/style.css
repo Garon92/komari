@@ -101,10 +101,27 @@ body {
 }
 
 .hud__combo {
+  --left: 1;
+  position: relative;
+  overflow: hidden;
   background: #facc15;
   color: #422006;
   border-color: transparent;
   transform-origin: left center;
+}
+
+.hud__combo::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 4px;
+  height: 3px;
+  border-radius: 3px;
+  background: currentColor;
+  opacity: 0.55;
+  transform-origin: left center;
+  transform: scaleX(var(--left));
 }
 
 .hud__combo[data-mul='3'] {

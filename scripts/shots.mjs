@@ -24,6 +24,10 @@ async function session(vpName, scheme) {
   const tag = `${vpName}-${scheme}`;
   const shot = (n) => page.screenshot({ path: `${out}/${tag}-${n}.png` });
 
+  // First visit opens the pictogram how-to.
+  await shot('00-howto');
+  await page.getByRole('button', { name: 'Rozumím' }).click();
+  await page.waitForTimeout(400);
   await shot('01-start');
   // Dialogs from the start screen.
   await page.click('[data-help]');

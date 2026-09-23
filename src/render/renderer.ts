@@ -23,7 +23,7 @@ export interface PointerState {
   touch: boolean;
 }
 
-const FONT = 'Nunito, "Nunito Sans", system-ui, -apple-system, "Segoe UI", sans-serif';
+const FONT = '"Nunito Variable", Nunito, ui-rounded, system-ui, -apple-system, "Segoe UI", sans-serif';
 
 export class Renderer {
   readonly canvas: HTMLCanvasElement;
@@ -313,6 +313,7 @@ export class Renderer {
     for (const m of divers) this.drawDiveWarning(m);
     for (const m of ms) if (m.kind === 'queen') this.drawBossBar(m);
     this.drawWelts(game);
+    this.drawIdleHint(game);
 
     this.fx.draw(g, FONT);
 
@@ -395,6 +396,29 @@ export class Renderer {
     }
     drawWings(g, r, m.wing, m.kind === 'golden' ? 'rgba(255,236,170,0.75)' : m.kind === 'queen' ? 'rgba(210,190,255,0.7)' : null);
     g.drawImage(sprite.canvas, -sprite.half * k, -sprite.half * k, sprite.half * 2 * k, sprite.half * 2 * k);
+    g.restore();
+  }
+
+  /** A bouncing pointing hand for players who haven't swatted yet (first game moments). */
+  private drawIdleHint(game: Game): void {
+    if (game.phase !== 'playing' || game.swats > 0 || game.phaseT < 2.5) return;
+    if (game.mode === 'waves' && game.wave !== 1) return;
+    const m = game.mosquitoes.find((q) => q.state === 'fly' && q.kind !== 'ninja');
+    if (!m) return;
+    const g = this.g;
+    const bounce = this.prefs.reducedMotion ? 0 : Math.abs(Math.sin(this.time * 4)) * 10;
+    g.save();
+    g.font = `40px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", ${FONT}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'top';
+    g.fillText('👆', m.x + 4, m.y + m.r + 8 + bounce);
+    g.font = `900 18px ${FONT}`;
+    g.lineWidth = 4;
+    g.lineJoin = 'round';
+    g.strokeStyle = 'rgba(15,23,42,0.85)';
+    g.strokeText('Plácni ho!', m.x + 4, m.y + m.r + 56 + bounce);
+    g.fillStyle = '#fff';
+    g.fillText('Plácni ho!', m.x + 4, m.y + m.r + 56 + bounce);
     g.restore();
   }
 

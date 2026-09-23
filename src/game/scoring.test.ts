@@ -57,7 +57,7 @@ describe('scoring', () => {
     expect(starsFor('waves', { wave: 6, score: 0, kills: 0 })).toBe(2);
     expect(starsFor('waves', { wave: 11, score: 0, kills: 0 })).toBe(3);
     expect(starsFor('minute', { wave: 0, score: 0, kills: 20 })).toBe(1);
-    expect(starsFor('minute', { wave: 0, score: 0, kills: 60 })).toBe(3);
+    expect(starsFor('minute', { wave: 0, score: 0, kills: 80 })).toBe(3);
     expect(starsFor('zen', { wave: 0, score: 0, kills: 50 })).toBe(2);
   });
 });

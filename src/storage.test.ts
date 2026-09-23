@@ -49,7 +49,7 @@ describe('achievements', () => {
     save.stats.totalKills = 120;
     save.stats.kindKills.ninja = 11;
     save.stats.powers = ['big', 'electric', 'spray', 'lamp', 'net', 'frost'];
-    const s = { mode: 'minute', kills: 41 } as Summary;
+    const s = { mode: 'minute', kills: 61 } as Summary;
     expect(checkLifetime(s, save)).toEqual(expect.arrayContaining(['hundred', 'ninja', 'minute40', 'collector']));
   });
 });

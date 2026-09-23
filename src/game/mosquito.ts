@@ -311,7 +311,7 @@ export function updateMosquito(m: Mosquito, dt: number, rect: Rect, rng: Rng, f:
   m.x += Math.cos(m.heading) * speed * dt;
   m.y += Math.sin(m.heading) * speed * dt;
   if (m.state === 'fly') {
-    if (m.kind === 'queen') keepInside(m, { x: rect.x, y: rect.y, w: rect.w, h: rect.h * 0.7 }, dt);
+    if (m.kind === 'queen') keepInside(m, { x: rect.x, y: rect.y + m.r, w: rect.w, h: rect.h * 0.65 }, dt);
     else keepInside(m, rect, dt);
   }
   return null;

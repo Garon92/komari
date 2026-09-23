@@ -28,7 +28,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: 'ninja', title: 'Lovec nindžů', desc: 'Zaplácni celkem 10 nindža komárů.', icon: '🥷' },
   { id: 'hundred', title: 'Stovka', desc: 'Zaplácni celkem 100 komárů.', icon: '💯' },
   { id: 'thousand', title: 'Tisícovka', desc: 'Zaplácni celkem 1000 komárů.', icon: '🏆' },
-  { id: 'minute40', title: 'Minutový mistr', desc: 'V Minutovce zaplácni 40 komárů.', icon: '⏰' },
+  { id: 'minute40', title: 'Minutový mistr', desc: 'V Minutovce zaplácni 60 komárů.', icon: '⏰' },
   { id: 'zen100', title: 'Zenový mistr', desc: 'V Pohodě zaplácni 100 komárů v jedné hře.', icon: '🧘' },
   { id: 'collector', title: 'Sběratel', desc: 'Seber každé vylepšení aspoň jednou.', icon: '🎒' },
 ];
@@ -87,7 +87,7 @@ export function checkLifetime(s: Summary, save: SaveData): string[] {
   add('ninja', (save.stats.kindKills.ninja ?? 0) >= 10);
   add('hundred', save.stats.totalKills >= 100);
   add('thousand', save.stats.totalKills >= 1000);
-  add('minute40', s.mode === 'minute' && s.kills >= 40);
+  add('minute40', s.mode === 'minute' && s.kills >= 60);
   add('zen100', s.mode === 'zen' && s.kills >= 100);
   const needed = POWER_ORDER.filter((k) => k !== 'time' && k !== 'heart');
   add('collector', needed.every((k) => save.stats.powers.includes(k)));

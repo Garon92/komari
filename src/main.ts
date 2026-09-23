@@ -150,6 +150,11 @@ function showStart(): void {
       swatAt(p.x, p.y, e.pointerType === 'touch');
     },
   });
+  // The kit shows the pictogram how-to on the very first visit.
+  if (!save.prefs.seenHelp) {
+    save.prefs.seenHelp = true;
+    writeSave(save);
+  }
 }
 
 function play(mode: Mode, difficulty: Difficulty): void {
