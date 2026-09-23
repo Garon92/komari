@@ -55,6 +55,11 @@ applySound();
 settings.subscribe(() => {
   applySound();
   applyPrefs();
+  // Theme switched in the g92 settings → matching attract-mode scene behind the start screen.
+  if (game.phase === 'menu' && game.scene !== menuScene()) {
+    game.startMenu(menuScene());
+    renderer.setScene(game.scene, true);
+  }
 });
 
 function changePrefs(p: Partial<Prefs>): void {
